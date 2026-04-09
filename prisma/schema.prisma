@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String?
+  role         String   @default("USER")
+  status       String   @default("PENDING")
+  storageMode  String   @default("LOCAL") @map("storage_mode")
+  createdAt    String   @map("created_at")
+  updatedAt    String   @map("updated_at")
+  investments  Investment[]
+  dailyRecords InvestmentDailySnapshot[]
+  portfolio    PortfolioDailySnapshot[]
+  logs         OperationLog[]
+  authAccounts AuthAccount[]
+
+  @@map("users")
+}
+
+model AuthAccount {
+  id                Int    @id @default(autoincrement())
+  userId            Int    @map("user_id")
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String
+  providerAccountId String @map("provider_account_id")
+  email             String?
+  avatarUrl         String? @map("avatar_url")
+  createdAt         String @map("created_at")
+  updatedAt         String @map("updated_at")
+
+  @@unique([provider, providerAccountId])
+  @@unique([userId, provider])
+  @@index([email])
+  @@map("auth_accounts")
+}
+
+model Investment {
+  id             Int                       @id @default(autoincrement())
+  userId         Int?                      @map("user_id")
+  user           User?                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project        String
+  assetName      String                    @map("asset_name")
+  url            String?
+  type           String
+  amount         Float                     @default(0)
+  currency       String                    @default("USD")
+  allocationNote String?                   @map("allocation_note")
+  aprExpected    Float?                    @map("apr_expected")
+  aprActual      Float?                    @map("apr_actual")
+  incomeTotal    Float?                    @map("income_total")
+  incomeDaily    Float?                    @map("income_daily")
+  incomeWeekly   Float?                    @map("income_weekly")
+  incomeMonthly  Float?                    @map("income_monthly")
+  incomeYearly   Float?                    @map("income_yearly")
+  startTime      String                    @map("start_time")
+  endTime        String?                   @map("end_time")
+  holdingDays    Int?                      @map("holding_days")
+  status         String                    @default("ONGOING")
+  remark         String?
+  isDeleted      Boolean                   @default(false) @map("is_deleted")
+  deletedAt      String?                   @map("deleted_at")
+  deletedBy      Int?                      @map("deleted_by")
+  createdAt      String                    @map("created_at")
+  updatedAt      String                    @map("updated_at")
+  snapshots      InvestmentDailySnapshot[]
+
+  @@index([userId, status, isDeleted])
+  @@map("investments")
+}
+
+model InvestmentDailySnapshot {
+  id            Int        @id @default(autoincrement())
+  userId        Int?       @map("user_id")
+  investmentId  Int        @map("investment_id")
+  user          User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  investment    Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  snapshotDate  String     @map("snapshot_date")
+  principal     Float
+  aprExpected   Float?     @map("apr_expected")
+  aprActual     Float?     @map("apr_actual")
+  incomeDaily   Float?     @map("income_daily")
+  incomeWeekly  Float?     @map("income_weekly")
+  incomeMonthly Float?     @map("income_monthly")
+  incomeYearly  Float?     @map("income_yearly")
+  incomeTotal   Float?     @map("income_total")
+  status        String
+  createdAt     String     @map("created_at")
+
+  @@unique([investmentId, snapshotDate])
+  @@map("investment_daily_snapshots")
+}
+
+model PortfolioDailySnapshot {
+  id                    Int     @id @default(autoincrement())
+  userId                Int?    @map("user_id")
+  user                  User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  snapshotDate          String  @map("snapshot_date")
+  totalPrincipal        Float   @map("total_principal")
+  portfolioAprExpected  Float?  @map("portfolio_apr_expected")
+  portfolioAprActual    Float?  @map("portfolio_apr_actual")
+  totalIncomeDaily      Float?  @map("total_income_daily")
+  totalIncomeWeekly     Float?  @map("total_income_weekly")
+  totalIncomeMonthly    Float?  @map("total_income_monthly")
+  totalIncomeYearly     Float?  @map("total_income_yearly")
+  cumulativeIncome      Float?  @map("cumulative_income")
+  activeInvestmentCount Int     @default(0) @map("active_investment_count")
+  createdAt             String  @map("created_at")
+
+  @@unique([userId, snapshotDate])
+  @@map("portfolio_daily_snapshots")
+}
+
+model OperationLog {
+  id         Int     @id @default(autoincrement())
+  userId     Int?    @map("user_id")
+  user       User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  targetType String  @map("target_type")
+  targetId   Int?    @map("target_id")
+  action     String
+  beforeData String? @map("before_data")
+  afterData  String? @map("after_data")
+  ip         String?
+  userAgent  String? @map("user_agent")
+  createdAt  String  @map("created_at")
+
+  @@map("operation_logs")
+}
+
+model ScheduledJobLog {
+  id             Int     @id @default(autoincrement())
+  jobName        String  @map("job_name")
+  runDate        String  @map("run_date")
+  status         String
+  processedCount Int     @default(0) @map("processed_count")
+  durationMs     Int?    @map("duration_ms")
+  errorMessage   String? @map("error_message")
+  startedAt      String? @map("started_at")
+  finishedAt     String? @map("finished_at")
+  createdAt      String  @map("created_at")
+
+  @@unique([jobName, runDate])
+  @@map("scheduled_job_logs")
+}
