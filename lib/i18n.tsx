@@ -61,6 +61,7 @@ const translations = {
       defaultCurrency: 'Default Currency',
       currency: 'Currency',
       profile: 'Profile',
+      logout: 'Log out',
       notifications: 'Notifications',
       displayPreferences: 'Display Preferences',
       dataManagement: 'Data Management',
@@ -72,6 +73,7 @@ const translations = {
       settings: 'Settings',
       login: 'Log in',
       getStarted: 'Get Started',
+      myAccount: 'My Account',
     },
     dashboard: {
       title: 'Investment Dashboard',
@@ -110,7 +112,13 @@ const translations = {
       deleted: 'Deleted',
     },
     table: {
+      activeInvestments: 'Active Investments',
+      activeInvestmentsDescription: 'Ongoing positions with live income metrics and start date.',
+      historyInvestments: 'Closed Investments',
+      historyInvestmentsDescription: 'Ended positions with timeline and settlement details.',
       noInvestmentsFound: 'No investments found',
+      noActiveInvestments: 'No active investments found',
+      noHistoryInvestments: 'No closed investments found',
       deleteInvestment: 'Delete Investment',
       deleteDescription:
         'Are you sure you want to delete {project} - {name}?',
@@ -125,6 +133,21 @@ const translations = {
         'The investment will be marked as ended and income calculations will stop.',
       endInvestment: 'End Investment',
       openLink: 'Open project link',
+      finishDate: 'Finish Date',
+      finalIncome: 'Final Total Income',
+      finalIncomeHint: 'Edit APR or income and we will sync the other value.',
+      actualAprLabel: 'Actual APR (%)',
+      actualAprHint: 'Based on principal and holding days.',
+      holdingDays: 'Holding Days: {days}',
+      startDate: 'Start',
+      endDate: 'End',
+      timeline: 'Timeline',
+      settlement: 'Settlement',
+      finalSettlement: 'Final income',
+      earlyExitRemark: 'Early exit note',
+      noRemark: 'No note',
+      projectedDailyIncome: 'Final daily income: {amount}',
+      saveFinishChanges: 'Save Finish Details',
     },
     form: {
       addTitle: 'Add New Investment',
@@ -168,6 +191,16 @@ const translations = {
       monthlyEarnings: 'Monthly Earnings',
       cumulative: 'Cumulative',
       monthly: 'Monthly',
+      projectedIncomeTrend: 'Projected Income Trend',
+      projectedIncomeTrendDescription: 'Derived from the current investment timeline until snapshot jobs are available.',
+      portfolioIncomeVolatility: 'Portfolio Income Volatility',
+      portfolioIncomeVolatilityDescription: 'Track daily income swings and cumulative income changes across the portfolio.',
+      dailyProjected: 'Projected Daily',
+      weeklyProjected: 'Projected Weekly',
+      monthlyProjected: 'Projected Monthly',
+      dailyPortfolioIncome: 'Daily Portfolio Income',
+      cumulativeProjectedIncome: 'Cumulative Income',
+      activeCapital: 'Active Capital',
       aprComparison: 'APR Comparison',
       expectedApr: 'Expected APR',
       actualApr: 'Actual APR',
@@ -308,6 +341,7 @@ const translations = {
       defaultCurrency: '默认币种',
       currency: '币种',
       profile: '个人资料',
+      logout: '退出登录',
       notifications: '通知',
       displayPreferences: '显示偏好',
       dataManagement: '数据管理',
@@ -319,6 +353,7 @@ const translations = {
       settings: '设置',
       login: '登录',
       getStarted: '立即开始',
+      myAccount: '我的账户',
     },
     dashboard: {
       title: '投资仪表盘',
@@ -357,7 +392,13 @@ const translations = {
       deleted: '已删除',
     },
     table: {
+      activeInvestments: '进行中投资',
+      activeInvestmentsDescription: '展示仍在持有的仓位、当前收益与开始时间。',
+      historyInvestments: '已结束投资',
+      historyInvestmentsDescription: '展示已结束或提前结束仓位的起止时间与结束信息。',
       noInvestmentsFound: '暂无投资记录',
+      noActiveInvestments: '暂无进行中的投资记录',
+      noHistoryInvestments: '暂无已结束的投资记录',
       deleteInvestment: '删除投资',
       deleteDescription: '确认删除 {project} - {name} 吗？',
       deleteAmount: '金额：{amount}',
@@ -369,6 +410,21 @@ const translations = {
       endHint: '该投资将被标记为已结束，收益计算也会停止。',
       endInvestment: '结束投资',
       openLink: '打开项目链接',
+      finishDate: '结束日期',
+      finalIncome: '最终累计收益',
+      finalIncomeHint: '修改实际 APR 或最终收益时，另一项会自动联动。',
+      actualAprLabel: '实际 APR (%)',
+      actualAprHint: '根据本金和实际持有天数计算。',
+      holdingDays: '实际持有天数：{days}',
+      startDate: '开始时间',
+      endDate: '结束时间',
+      timeline: '起止时间',
+      settlement: '结束信息',
+      finalSettlement: '最终收益',
+      earlyExitRemark: '提前结束备注',
+      noRemark: '无备注',
+      projectedDailyIncome: '最终日收益：{amount}',
+      saveFinishChanges: '保存结束信息',
     },
     form: {
       addTitle: '新增投资',
@@ -412,6 +468,16 @@ const translations = {
       monthlyEarnings: '月收益',
       cumulative: '累计收益',
       monthly: '月度',
+      projectedIncomeTrend: '预估收入趋势',
+      projectedIncomeTrendDescription: '在快照任务落地前，先基于当前投资时间轴推导趋势。',
+      portfolioIncomeVolatility: '资产收入波动',
+      portfolioIncomeVolatilityDescription: '根据每日收入观察组合收入波动和累计变化。',
+      dailyProjected: '预估日收益',
+      weeklyProjected: '预估周收益',
+      monthlyProjected: '预估月收益',
+      dailyPortfolioIncome: '组合日收益',
+      cumulativeProjectedIncome: '累计收益',
+      activeCapital: '活跃本金',
       aprComparison: 'APR 对比',
       expectedApr: '预期 APR',
       actualApr: '实际 APR',
@@ -546,6 +612,18 @@ function getIntlLocale(locale: Locale) {
   return locale === 'zh' ? 'zh-CN' : 'en-US'
 }
 
+function hasTimeInfo(value: string | Date) {
+  if (value instanceof Date) {
+    return (
+      value.getHours() !== 0 ||
+      value.getMinutes() !== 0 ||
+      value.getSeconds() !== 0
+    )
+  }
+
+  return /[T ]\d{2}:\d{2}(:\d{2})?/.test(value)
+}
+
 function translate(locale: Locale, key: string, params?: TranslationParams) {
   const template =
     getNestedValue(translations[locale] as Record<string, any>, key) ??
@@ -613,6 +691,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           month: 'short',
           day: 'numeric',
           year: 'numeric',
+          ...(hasTimeInfo(value)
+            ? {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              }
+            : {}),
           ...options,
         }).format(typeof value === 'string' ? new Date(value) : value),
       localizeErrorMessage: (message) => {

@@ -42,6 +42,13 @@ export interface InvestmentFormData {
   actualApr?: number
 }
 
+export interface EndInvestmentData {
+  endDate: string
+  actualApr?: number
+  totalIncome?: number
+  remark?: string
+}
+
 export interface EarningsStats {
   totalInvestment: number
   totalDailyIncome: number

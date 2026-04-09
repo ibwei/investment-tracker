@@ -6,17 +6,18 @@ import { useI18n } from '@/lib/i18n'
 import { buildProjectedPortfolioSeries } from '@/lib/analytics'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
 
-export function EarningsChart() {
+export function PortfolioIncomeVolatility() {
   const investments = useInvestmentStore((state) => state.investments)
   const { t, formatCurrency, locale } = useI18n()
 
@@ -28,13 +29,19 @@ export function EarningsChart() {
   return (
     <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
       <CardHeader>
-        <CardTitle className="text-lg font-medium">{t('analytics.projectedIncomeTrend')}</CardTitle>
-        <CardDescription>{t('analytics.projectedIncomeTrendDescription')}</CardDescription>
+        <CardTitle className="text-lg font-medium">{t('analytics.portfolioIncomeVolatility')}</CardTitle>
+        <CardDescription>{t('analytics.portfolioIncomeVolatilityDescription')}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="h-[320px] sm:h-[360px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="portfolioDailyGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="oklch(0.7 0.15 160)" stopOpacity={0.28} />
+                  <stop offset="100%" stopColor="oklch(0.7 0.15 160)" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.3 0 0)" vertical={false} />
               <XAxis
                 dataKey="label"
@@ -44,6 +51,16 @@ export function EarningsChart() {
                 tick={{ fill: 'oklch(0.6 0 0)', fontSize: 12 }}
               />
               <YAxis
+                yAxisId="income"
+                axisLine={false}
+                tickLine={false}
+                width={84}
+                tick={{ fill: 'oklch(0.6 0 0)', fontSize: 12 }}
+                tickFormatter={(value) => formatCurrency(value, 'USD', 0)}
+              />
+              <YAxis
+                yAxisId="cumulative"
+                orientation="right"
                 axisLine={false}
                 tickLine={false}
                 width={84}
@@ -60,9 +77,9 @@ export function EarningsChart() {
                 labelStyle={{ color: 'oklch(0.95 0 0)', marginBottom: '4px' }}
                 formatter={(value: number, name: string) => {
                   const labelMap: Record<string, string> = {
-                    daily: t('analytics.dailyProjected'),
-                    weekly: t('analytics.weeklyProjected'),
-                    monthly: t('analytics.monthlyProjected'),
+                    daily: t('analytics.dailyPortfolioIncome'),
+                    cumulativeIncome: t('analytics.cumulativeProjectedIncome'),
+                    principal: t('analytics.activeCapital'),
                   }
 
                   return [formatCurrency(value), labelMap[name] ?? name]
@@ -73,9 +90,9 @@ export function EarningsChart() {
                 height={24}
                 formatter={(value) => {
                   const labelMap: Record<string, string> = {
-                    daily: t('analytics.dailyProjected'),
-                    weekly: t('analytics.weeklyProjected'),
-                    monthly: t('analytics.monthlyProjected'),
+                    daily: t('analytics.dailyPortfolioIncome'),
+                    cumulativeIncome: t('analytics.cumulativeProjectedIncome'),
+                    principal: t('analytics.activeCapital'),
                   }
 
                   return (
@@ -85,34 +102,37 @@ export function EarningsChart() {
                   )
                 }}
               />
-              <Line
+              <Area
+                yAxisId="income"
                 type="monotone"
                 dataKey="daily"
                 name="daily"
                 stroke="oklch(0.7 0.15 160)"
                 strokeWidth={2.25}
-                dot={false}
-                activeDot={{ r: 4 }}
+                fill="url(#portfolioDailyGradient)"
               />
               <Line
+                yAxisId="cumulative"
                 type="monotone"
-                dataKey="weekly"
-                name="weekly"
+                dataKey="cumulativeIncome"
+                name="cumulativeIncome"
                 stroke="oklch(0.65 0.18 200)"
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
               <Line
+                yAxisId="cumulative"
                 type="monotone"
-                dataKey="monthly"
-                name="monthly"
+                dataKey="principal"
+                name="principal"
                 stroke="oklch(0.75 0.12 80)"
-                strokeWidth={2}
+                strokeWidth={1.75}
+                strokeDasharray="6 6"
                 dot={false}
                 activeDot={{ r: 4 }}
               />
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </CardContent>

@@ -7,6 +7,7 @@ import { getInvestmentRepository } from '@/lib/storage/repositories'
 import { STORAGE_MODES } from '@/lib/storage-mode'
 import { useAppStore } from '@/store/app-store'
 import type {
+  EndInvestmentData,
   FilterOptions,
   Investment,
   InvestmentFormData,
@@ -133,7 +134,7 @@ interface InvestmentStore {
   updateInvestment: (id: string, data: Partial<InvestmentFormData>) => Promise<void>
   deleteInvestment: (id: string) => Promise<void>
   restoreInvestment: (id: string) => Promise<void>
-  endInvestment: (id: string, finalIncome?: number) => Promise<void>
+  endInvestment: (id: string, data: EndInvestmentData) => Promise<void>
   clearAllData: () => Promise<void>
   setFilters: (filters: Partial<FilterOptions>) => void
   setSort: (field: SortField, direction: SortDirection) => void
@@ -245,7 +246,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
         await get().initialize()
       },
 
-      endInvestment: async (id, finalIncome) => {
+      endInvestment: async (id, data) => {
         const current = get().investments.find((investment) => investment.id === id)
         if (!current) {
           return
@@ -255,8 +256,10 @@ export const useInvestmentStore = create<InvestmentStore>()(
         try {
           const snapshot = await getRepository().earlyClose(id, {
             status: mapStatusToRepository('early_ended'),
-            endTime: new Date().toISOString().split('T')[0],
-            incomeTotal: finalIncome ?? current.totalIncome,
+            endTime: data.endDate,
+            incomeTotal: data.totalIncome ?? current.totalIncome,
+            aprActual: data.actualApr ?? current.actualApr,
+            remark: data.remark ?? current.remark,
           })
           set({ investments: mapSnapshot(snapshot), isLoading: false })
         } catch (error: any) {

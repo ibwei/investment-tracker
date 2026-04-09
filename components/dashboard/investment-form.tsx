@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 import {
   Select,
   SelectContent,
@@ -31,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { toDateTimeValue } from '@/lib/calculations'
 
 function createInvestmentSchema(t: (key: string) => string) {
   return z.object({
@@ -49,7 +51,15 @@ function createInvestmentSchema(t: (key: string) => string) {
       .number()
       .min(0, t('validation.aprNonNegative'))
       .max(1000, t('validation.aprTooHigh')),
-    actualApr: z.coerce.number().min(0).max(1000).optional(),
+    actualApr: z.preprocess(
+      (value) => {
+        if (value === '' || value === null || value === undefined) {
+          return undefined
+        }
+        return value
+      },
+      z.coerce.number().min(0).max(1000).optional(),
+    ),
   })
 }
 
@@ -91,7 +101,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
       amount: 0,
       currency: 'USDC',
       description: '',
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: toDateTimeValue(new Date()),
       endDate: '',
       remark: '',
       expectedApr: 0,
@@ -124,7 +134,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
         amount: 0,
         currency: 'USDC',
         description: '',
-        startDate: new Date().toISOString().split('T')[0],
+        startDate: toDateTimeValue(new Date()),
         endDate: '',
         remark: '',
         expectedApr: 0,
@@ -273,7 +283,11 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
                   <FormItem>
                     <FormLabel>{t('form.startDate')}</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <DateTimePicker
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -287,7 +301,11 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
                   <FormItem>
                     <FormLabel>{t('form.endDate')}</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <DateTimePicker
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

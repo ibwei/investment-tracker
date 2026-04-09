@@ -32,6 +32,14 @@ const ProjectBreakdown = dynamic(
   { ssr: false }
 );
 
+const PortfolioIncomeVolatility = dynamic(
+  () =>
+    import("@/components/analytics/portfolio-income-volatility").then(
+      (module) => module.PortfolioIncomeVolatility
+    ),
+  { ssr: false }
+);
+
 export default function AnalyticsPage() {
   const initialize = useInvestmentStore((state) => state.initialize);
   const { t } = useI18n();
@@ -61,6 +69,10 @@ export default function AnalyticsPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="lg:col-span-2">
             <EarningsChart />
+          </section>
+
+          <section className="lg:col-span-2">
+            <PortfolioIncomeVolatility />
           </section>
 
           <section>

@@ -27,6 +27,7 @@ import {
   FormMessage
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/components/auth-provider";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +53,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { t, localizeErrorMessage } = useI18n();
+  const { setUser } = useAuth();
   const registerSchema = createRegisterSchema(t);
   const passwordRequirements = [
     { label: t("passwordRules.minLength"), test: (password) => password.length >= 8 },
@@ -105,6 +107,7 @@ export default function RegisterPage() {
         throw new Error(payload.error || t("auth.registerFailed"));
       }
 
+      setUser(payload.user);
       toast.success(t("auth.registerSuccess"));
       router.push("/");
       router.refresh();

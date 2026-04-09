@@ -26,6 +26,7 @@ import {
   FormMessage
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/components/auth-provider";
 import { useI18n } from "@/lib/i18n";
 
 function createLoginSchema(t) {
@@ -40,6 +41,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { t, localizeErrorMessage } = useI18n();
+  const { setUser } = useAuth();
   const loginSchema = createLoginSchema(t);
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export default function LoginPage() {
         throw new Error(payload.error || t("auth.loginFailed"));
       }
 
+      setUser(payload.user);
       toast.success(t("auth.loginSuccess"));
       router.push("/");
       router.refresh();

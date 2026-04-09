@@ -26,8 +26,9 @@ export function StatsCards() {
     const totalWeeklyIncome = activeInvestments.reduce((sum, i) => sum + i.weeklyIncome, 0)
     const totalMonthlyIncome = activeInvestments.reduce((sum, i) => sum + i.monthlyIncome, 0)
     const totalYearlyIncome = activeInvestments.reduce((sum, i) => sum + i.yearlyIncome, 0)
-    const averageApr = activeInvestments.length > 0
-      ? activeInvestments.reduce((sum, i) => sum + i.actualApr, 0) / activeInvestments.length
+    const averageAprBase = activeInvestments.reduce((sum, i) => sum + i.amount, 0)
+    const averageApr = averageAprBase > 0
+      ? activeInvestments.reduce((sum, i) => sum + i.expectedApr * i.amount, 0) / averageAprBase
       : 0
     
     return {

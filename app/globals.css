@@ -136,3 +136,106 @@
     @apply bg-background text-foreground;
   }
 }
+
+.earn-date-time-popup .ant-picker-panel-container,
+.earn-date-time-popup .ant-picker-time-panel,
+.earn-date-time-popup .ant-picker-content,
+.earn-date-time-popup .ant-picker-time-panel-column,
+.earn-date-time-popup .ant-picker-header,
+.earn-date-time-popup .ant-picker-footer,
+.earn-date-time-popup .ant-picker-presets {
+  background: #09090b !important;
+}
+
+.earn-date-time-popup .ant-picker-panel-container {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55) !important;
+}
+
+.earn-date-time-popup .ant-picker-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.earn-date-time-popup .ant-picker-header button,
+.earn-date-time-popup .ant-picker-header-view,
+.earn-date-time-popup .ant-picker-time-panel-column > li,
+.earn-date-time-popup .ant-picker-now-btn {
+  color: #f4f4f5 !important;
+}
+
+.earn-date-time-popup .ant-picker-header button:hover,
+.earn-date-time-popup .ant-picker-header-view button:hover,
+.earn-date-time-popup .ant-picker-now-btn:hover {
+  color: #34d399 !important;
+}
+
+.earn-date-time-popup .ant-picker-header button[disabled] {
+  color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.earn-date-time-popup .ant-picker-content th,
+.earn-date-time-popup .ant-picker-cell,
+.earn-date-time-popup .ant-picker-time-panel-column > li {
+  color: #f4f4f5 !important;
+}
+
+.earn-date-time-popup .ant-picker-cell-in-view.ant-picker-cell-today .ant-picker-cell-inner::before {
+  border-color: #34d399 !important;
+}
+
+.earn-date-time-popup .ant-picker-cell-in-view.ant-picker-cell-selected .ant-picker-cell-inner,
+.earn-date-time-popup .ant-picker-cell-in-view.ant-picker-cell-range-start .ant-picker-cell-inner,
+.earn-date-time-popup .ant-picker-cell-in-view.ant-picker-cell-range-end .ant-picker-cell-inner {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 100%) !important;
+  color: #03140f !important;
+  font-weight: 700;
+}
+
+.earn-date-time-popup .ant-picker-footer {
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.earn-date-time-popup .ant-picker-ok button {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 100%) !important;
+  border-color: transparent !important;
+  color: #03140f !important;
+  font-weight: 700;
+}
+
+.earn-date-time-popup .ant-picker-ok button:hover {
+  background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%) !important;
+}
+
+.earn-date-time-popup .ant-picker-time-panel-column > li.ant-picker-time-panel-cell .ant-picker-time-panel-cell-inner {
+  color: #f4f4f5 !important;
+  border-radius: 10px;
+}
+
+.earn-date-time-popup .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 100%) !important;
+  color: #03140f !important;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35);
+}
+
+.earn-date-time-popup .ant-picker-time-panel-column > li.ant-picker-time-panel-cell:hover .ant-picker-time-panel-cell-inner {
+  background: rgba(52, 211, 153, 0.14) !important;
+}
+
+.earn-date-time-popup .ant-picker-time-panel-column::after {
+  background: linear-gradient(180deg, rgba(9, 9, 11, 0), #09090b 60%) !important;
+}
+
+.earn-date-time-popup .ant-picker-time-panel-cell::before {
+  border-block-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.earn-date-time-popup .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected:hover .ant-picker-time-panel-cell-inner {
+  background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%) !important;
+  color: #03140f !important;
+}
+
+.earn-date-time-popup .ant-picker-time-panel-column-count > li::after,
+.earn-date-time-popup .ant-picker-time-panel-column-count > li::before {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
