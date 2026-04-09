@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
 import {
   getDashboardSnapshot,
   softDeleteInvestment,
@@ -30,12 +31,13 @@ function parseId(rawId) {
 
 export async function PATCH(request, context) {
   try {
+    const session = await requireSession();
     const id = parseId((await context.params).id);
     const body = await request.json();
-    const record = await updateInvestment(id, body);
+    const record = await updateInvestment(session.userId, id, body);
     return NextResponse.json({
       record,
-      snapshot: await getDashboardSnapshot()
+      snapshot: await getDashboardSnapshot(session.userId)
     });
   } catch (error) {
     return handleRouteError(error);
@@ -44,12 +46,13 @@ export async function PATCH(request, context) {
 
 export async function DELETE(request, context) {
   try {
+    const session = await requireSession();
     const id = parseId((await context.params).id);
     const body = await request.json();
-    await softDeleteInvestment(id, body?.confirmationText);
+    await softDeleteInvestment(session.userId, id, body?.confirmationText);
     return NextResponse.json({
       success: true,
-      snapshot: await getDashboardSnapshot()
+      snapshot: await getDashboardSnapshot(session.userId)
     });
   } catch (error) {
     return handleRouteError(error);

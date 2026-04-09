@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
 import {
   finishInvestment,
   getDashboardSnapshot
@@ -29,12 +30,13 @@ function parseId(rawId) {
 
 export async function POST(request, context) {
   try {
+    const session = await requireSession();
     const id = parseId((await context.params).id);
     const body = await request.json();
-    const record = await finishInvestment(id, body);
+    const record = await finishInvestment(session.userId, id, body);
     return NextResponse.json({
       record,
-      snapshot: await getDashboardSnapshot()
+      snapshot: await getDashboardSnapshot(session.userId)
     });
   } catch (error) {
     return handleRouteError(error);

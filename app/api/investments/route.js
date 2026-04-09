@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
 import {
   clearAllInvestments,
   createInvestment,
@@ -20,7 +21,8 @@ function handleRouteError(error) {
 
 export async function GET() {
   try {
-    return NextResponse.json(await getDashboardSnapshot());
+    const session = await requireSession();
+    return NextResponse.json(await getDashboardSnapshot(session.userId));
   } catch (error) {
     return handleRouteError(error);
   }
@@ -28,11 +30,12 @@ export async function GET() {
 
 export async function POST(request) {
   try {
+    const session = await requireSession();
     const body = await request.json();
-    const record = await createInvestment(body);
+    const record = await createInvestment(session.userId, body);
     return NextResponse.json({
       record,
-      snapshot: await getDashboardSnapshot()
+      snapshot: await getDashboardSnapshot(session.userId)
     });
   } catch (error) {
     return handleRouteError(error);
@@ -41,8 +44,9 @@ export async function POST(request) {
 
 export async function DELETE() {
   try {
+    const session = await requireSession();
     return NextResponse.json({
-      snapshot: await clearAllInvestments()
+      snapshot: await clearAllInvestments(session.userId)
     });
   } catch (error) {
     return handleRouteError(error);

@@ -9,7 +9,7 @@ import {
 import { findOrCreateOAuthUser } from "@/lib/users";
 
 export async function GET(request, context) {
-  const provider = String(context.params?.provider || "").toLowerCase();
+  const provider = String((await context.params)?.provider || "").toLowerCase();
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");

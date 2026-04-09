@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@/lib/types";
+import { setLocalUserScope } from "@/lib/storage/local-user-scope";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -20,6 +21,10 @@ export function AuthProvider({
   initialUser?: AuthUser | null;
 }) {
   const [user, setUser] = useState<AuthUser | null>(initialUser);
+
+  useEffect(() => {
+    setLocalUserScope(user?.id ? `user:${user.id}` : "guest");
+  }, [user]);
 
   const value = useMemo(
     () => ({

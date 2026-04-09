@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getOAuthAuthorizationUrl, buildOAuthErrorRedirect } from "@/lib/oauth";
 
 export async function GET(request, context) {
-  const provider = String(context.params?.provider || "").toLowerCase();
+  const provider = String((await context.params)?.provider || "").toLowerCase();
 
   try {
     const url = await getOAuthAuthorizationUrl(request, provider);
