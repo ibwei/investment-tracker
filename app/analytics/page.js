@@ -40,6 +40,14 @@ const PortfolioIncomeVolatility = dynamic(
   { ssr: false }
 );
 
+const RealSnapshotTrend = dynamic(
+  () =>
+    import("@/components/analytics/real-snapshot-trend").then(
+      (module) => module.RealSnapshotTrend
+    ),
+  { ssr: false }
+);
+
 export default function AnalyticsPage() {
   const initialize = useInvestmentStore((state) => state.initialize);
   const { t } = useI18n();
@@ -67,6 +75,10 @@ export default function AnalyticsPage() {
         </section>
 
         <div className="grid gap-6 lg:grid-cols-2">
+          <section className="lg:col-span-2">
+            <RealSnapshotTrend />
+          </section>
+
           <section className="lg:col-span-2">
             <EarningsChart />
           </section>
