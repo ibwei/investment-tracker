@@ -811,6 +811,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       new Intl.NumberFormat(getIntlLocale(locale), {
         style: 'currency',
         currency,
+        currencyDisplay: currency === 'CNY' ? 'narrowSymbol' : 'symbol',
         minimumFractionDigits: Math.min(2, maximumFractionDigits),
         maximumFractionDigits,
       }).format(value)
