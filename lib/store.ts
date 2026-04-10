@@ -111,6 +111,7 @@ function mapFormToPayload(data: InvestmentFormData, currentStatus: InvestmentSta
     endTime: data.endDate,
     aprExpected: data.expectedApr,
     aprActual: data.actualApr ?? null,
+    incomeTotal: data.expectedIncome ?? null,
     status: mapStatusToRepository(currentStatus),
     remark: data.remark,
   }
@@ -210,6 +211,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
           remark: data.remark ?? current.remark,
           expectedApr: data.expectedApr ?? current.expectedApr,
           actualApr: data.actualApr ?? current.actualApr,
+          expectedIncome: data.expectedIncome ?? current.totalIncome,
         }
 
         set({ isLoading: true, errorMessage: '' })

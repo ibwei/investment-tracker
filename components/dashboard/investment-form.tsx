@@ -60,6 +60,15 @@ function createInvestmentSchema(t: (key: string) => string) {
       },
       z.coerce.number().min(0).max(1000).optional(),
     ),
+    expectedIncome: z.preprocess(
+      (value) => {
+        if (value === '' || value === null || value === undefined) {
+          return undefined
+        }
+        return value
+      },
+      z.coerce.number().min(0, t('validation.incomeNonNegative')).optional(),
+    ),
   })
 }
 
@@ -76,6 +85,7 @@ type InvestmentFormValues = {
   remark: string
   expectedApr: number | string
   actualApr?: number | string
+  expectedIncome?: number | string
 }
 type FormData = z.output<ReturnType<typeof createInvestmentSchema>>
 
@@ -106,6 +116,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
       remark: '',
       expectedApr: 0,
       actualApr: undefined,
+      expectedIncome: undefined,
     },
   })
 
@@ -124,6 +135,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
         remark: investment.remark,
         expectedApr: investment.expectedApr,
         actualApr: investment.actualApr,
+        expectedIncome: investment.totalIncome,
       })
     } else {
       form.reset({
@@ -139,6 +151,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
         remark: '',
         expectedApr: 0,
         actualApr: undefined,
+        expectedIncome: undefined,
       })
     }
   }, [investment, form])
@@ -328,6 +341,28 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="expectedIncome"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('form.expectedIncome')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder={t('form.expectedIncomePlaceholder')}
+                        {...field}
+                        value={field.value ?? ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="actualApr"

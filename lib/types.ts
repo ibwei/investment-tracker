@@ -40,6 +40,7 @@ export interface InvestmentFormData {
   remark: string
   expectedApr: number
   actualApr?: number
+  expectedIncome?: number
 }
 
 export interface EndInvestmentData {
