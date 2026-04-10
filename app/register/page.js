@@ -278,7 +278,7 @@ export default function RegisterPage() {
                   )}
                 />
 
-                <Button type="submit" className="w-full gap-2" disabled={isLoading}>
+                <Button type="submit" className="w-full gap-2" loading={isLoading}>
                   {isLoading ? t("auth.creatingAccount") : t("auth.createAccount")}
                   <ArrowRight className="h-4 w-4" />
                 </Button>

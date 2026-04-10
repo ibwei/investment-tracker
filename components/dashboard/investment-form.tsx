@@ -119,6 +119,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
       expectedIncome: undefined,
     },
   })
+  const isSubmitting = form.formState.isSubmitting
 
   useEffect(() => {
     if (investment) {
@@ -168,8 +169,18 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isSubmitting) {
+          onOpenChange(nextOpen)
+        }
+      }}
+    >
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
+        showCloseButton={!isSubmitting}
+      >
         <DialogHeader>
           <DialogTitle>
             {investment ? t('form.editTitle') : t('form.addTitle')}
@@ -417,10 +428,16 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
             />
 
             <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-border bg-background hover:bg-muted hover:text-foreground"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
                 {t('common.cancel')}
               </Button>
-              <Button type="submit">
+              <Button type="submit" loading={isSubmitting}>
                 {investment ? t('common.saveChanges') : t('common.addInvestment')}
               </Button>
             </div>

@@ -65,6 +65,8 @@ export default function SettingsPage() {
     email: "demo@example.com"
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   useEffect(() => {
     void initialize();
@@ -153,8 +155,15 @@ export default function SettingsPage() {
   };
 
   const handleClearData = async () => {
-    await clearAllData();
-    toast.success(t("settings.clearSuccess"));
+    setIsClearing(true);
+
+    try {
+      await clearAllData();
+      setClearDialogOpen(false);
+      toast.success(t("settings.clearSuccess"));
+    } finally {
+      setIsClearing(false);
+    }
   };
 
   return (
@@ -371,9 +380,16 @@ export default function SettingsPage() {
                   {t("common.exportData")}
                 </Button>
 
-                <AlertDialog>
+                <AlertDialog
+                  open={clearDialogOpen}
+                  onOpenChange={(open) => {
+                    if (!isClearing) {
+                      setClearDialogOpen(open);
+                    }
+                  }}
+                >
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="gap-2">
+                    <Button variant="destructive" className="gap-2" disabled={isClearing}>
                       <Trash2 className="h-4 w-4" />
                       {t("common.clearAllData")}
                     </Button>
@@ -386,9 +402,16 @@ export default function SettingsPage() {
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                      <AlertDialogCancel disabled={isClearing}>
+                        {t("common.cancel")}
+                      </AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => void handleClearData()}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void handleClearData();
+                        }}
+                        loading={isClearing}
+                        disabled={isClearing}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
                         {t("settings.deleteAllData")}
@@ -401,7 +424,7 @@ export default function SettingsPage() {
           </Card>
 
           <div className="flex justify-end">
-            <Button onClick={() => void handleSave()} className="gap-2" disabled={isSaving}>
+            <Button onClick={() => void handleSave()} className="gap-2" loading={isSaving}>
               <Save className="h-4 w-4" />
               {isSaving ? t("common.saving") : t("common.saveChanges")}
             </Button>

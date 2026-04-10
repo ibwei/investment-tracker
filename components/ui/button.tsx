@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
+import { Loader2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -13,11 +14,11 @@ const buttonVariants = cva(
         destructive:
           'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
         outline:
-          'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
+          'border border-border bg-background text-foreground shadow-xs hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-muted',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost:
-          'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
+          'text-foreground hover:bg-muted hover:text-foreground dark:hover:bg-muted/80',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
@@ -41,10 +42,14 @@ function Button({
   variant,
   size,
   asChild = false,
+  loading = false,
+  disabled,
+  children,
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    loading?: boolean
   }) {
   const Comp = asChild ? Slot : 'button'
 
@@ -52,8 +57,13 @@ function Button({
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      disabled={!asChild ? disabled || loading : undefined}
+      aria-disabled={disabled || loading}
       {...props}
-    />
+    >
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+      {children}
+    </Comp>
   )
 }
 

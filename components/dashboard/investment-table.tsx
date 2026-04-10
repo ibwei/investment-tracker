@@ -236,6 +236,8 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
   const [deleteDialog, setDeleteDialog] = useState<Investment | null>(null)
   const [endDialog, setEndDialog] = useState<EndDialogState | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [isDeletePending, setIsDeletePending] = useState(false)
+  const [isEndPending, setIsEndPending] = useState(false)
   const deleteConfirmationKeyword = getDeleteConfirmationKeyword()
   const activeInvestments = useMemo(
     () => investments.filter((investment) => isActiveInvestment(investment.status)),
@@ -254,15 +256,20 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
     }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteDialog && deleteConfirm === deleteConfirmationKeyword) {
-      void deleteInvestment(deleteDialog.id)
-      setDeleteDialog(null)
-      setDeleteConfirm('')
+      setIsDeletePending(true)
+      try {
+        await deleteInvestment(deleteDialog.id)
+        setDeleteDialog(null)
+        setDeleteConfirm('')
+      } finally {
+        setIsDeletePending(false)
+      }
     }
   }
 
-  const handleEnd = () => {
+  const handleEnd = async () => {
     if (endDialog) {
       const payload: EndInvestmentData = {
         endDate: endDialog.endDate,
@@ -271,8 +278,13 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
         remark: endDialog.remark.trim(),
       }
 
-      void endInvestment(endDialog.investment.id, payload)
-      setEndDialog(null)
+      setIsEndPending(true)
+      try {
+        await endInvestment(endDialog.investment.id, payload)
+        setEndDialog(null)
+      } finally {
+        setIsEndPending(false)
+      }
     }
   }
 
@@ -483,7 +495,7 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
                     </TableHead>
                     <TableHead className="hidden xl:table-cell">{t('table.startDate')}</TableHead>
                     <TableHead>{t('common.status')}</TableHead>
-                    <TableHead className="w-[60px]"></TableHead>
+                    <TableHead className="w-[60px] text-right">{t('common.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -618,7 +630,7 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
                     <TableHead className="hidden xl:table-cell">{t('table.timeline')}</TableHead>
                     <TableHead className="hidden 2xl:table-cell">{t('table.settlement')}</TableHead>
                     <TableHead>{t('common.status')}</TableHead>
-                    <TableHead className="w-[60px]"></TableHead>
+                    <TableHead className="w-[60px] text-right">{t('common.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -707,10 +719,15 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteDialog} onOpenChange={() => {
-        setDeleteDialog(null)
-        setDeleteConfirm('')
-      }}>
+      <AlertDialog
+        open={!!deleteDialog}
+        onOpenChange={(open) => {
+          if (!open && !isDeletePending) {
+            setDeleteDialog(null)
+            setDeleteConfirm('')
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('table.deleteInvestment')}</AlertDialogTitle>
@@ -746,15 +763,25 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
                   onChange={(e) => setDeleteConfirm(e.target.value)}
                   placeholder={deleteConfirmationKeyword}
                   className="mt-2"
+                  disabled={isDeletePending}
                 />
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel
+              className="border-border bg-background hover:bg-muted hover:text-foreground"
+              disabled={isDeletePending}
+            >
+              {t('common.cancel')}
+            </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDelete()
+              }}
               disabled={deleteConfirm !== deleteConfirmationKeyword}
+              loading={isDeletePending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {t('common.delete')}
@@ -763,8 +790,15 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={!!endDialog} onOpenChange={(open) => !open && setEndDialog(null)}>
-        <DialogContent className="sm:max-w-[560px]">
+      <Dialog
+        open={!!endDialog}
+        onOpenChange={(open) => {
+          if (!open && !isEndPending) {
+            setEndDialog(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]" showCloseButton={!isEndPending}>
           <DialogHeader>
             <DialogTitle>{t('table.endInvestmentEarly')}</DialogTitle>
             <DialogDescription className="space-y-2">
@@ -811,6 +845,7 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
                       })
                     }
                     className="w-full"
+                    disabled={isEndPending}
                   />
                 </div>
 
@@ -827,6 +862,7 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
                         current ? syncEndDialogFromApr(current, event.target.value) : current,
                       )
                     }
+                    disabled={isEndPending}
                   />
                   <p className="text-xs text-muted-foreground">{t('table.actualAprHint')}</p>
                 </div>
@@ -843,6 +879,7 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
                         current ? syncEndDialogFromIncome(current, event.target.value) : current,
                       )
                     }
+                    disabled={isEndPending}
                   />
                   <p className="text-xs text-muted-foreground">{t('table.finalIncomeHint')}</p>
                 </div>
@@ -862,6 +899,7 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
                           : current,
                       )
                     }
+                    disabled={isEndPending}
                   />
                   <p className="text-xs text-muted-foreground">
                     {t('table.projectedDailyIncome', {
@@ -874,10 +912,15 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
           ) : null}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEndDialog(null)}>
+            <Button
+              variant="outline"
+              className="border-border bg-background hover:bg-muted hover:text-foreground"
+              onClick={() => setEndDialog(null)}
+              disabled={isEndPending}
+            >
               {t('common.cancel')}
             </Button>
-            <Button onClick={handleEnd}>
+            <Button onClick={() => void handleEnd()} loading={isEndPending}>
               {t('table.saveFinishChanges')}
             </Button>
           </DialogFooter>
