@@ -14,6 +14,25 @@ type Locale = 'en' | 'zh'
 type TranslationParams = Record<string, string | number>
 
 const LOCALE_STORAGE_KEY = 'earn-compass-locale'
+const DISPLAY_CURRENCY_STORAGE_KEY = 'earn-compass-display-currency'
+const EXCHANGE_RATE_STORAGE_KEY = 'earn-compass-usd-display-rate'
+
+export const DISPLAY_CURRENCIES = [
+  'USD',
+  'CNY',
+  'EUR',
+  'GBP',
+  'JPY',
+  'HKD',
+  'SGD',
+  'AUD',
+  'CAD',
+  'CHF',
+  'KRW',
+  'AED',
+] as const
+
+type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number]
 
 const translations = {
   en: {
@@ -645,6 +664,18 @@ function isLocale(value: string | null | undefined): value is Locale {
   return value === 'en' || value === 'zh'
 }
 
+function isDisplayCurrency(value: string | null | undefined): value is DisplayCurrency {
+  return DISPLAY_CURRENCIES.includes(value as DisplayCurrency)
+}
+
+function convertFromUsdBase(value: number, currency: DisplayCurrency, usdToDisplayRate: number) {
+  if (currency !== 'USD') {
+    return value * usdToDisplayRate
+  }
+
+  return value
+}
+
 function getBrowserLocale(): Locale {
   if (typeof navigator === 'undefined') {
     return 'en'
@@ -656,8 +687,12 @@ function getBrowserLocale(): Locale {
 type I18nContextValue = {
   locale: Locale
   setLocale: (locale: Locale) => void
+  displayCurrency: DisplayCurrency
+  setDisplayCurrency: (currency: DisplayCurrency) => void
   t: (key: string, params?: TranslationParams) => string
   formatCurrency: (value: number, currency?: string, maximumFractionDigits?: number) => string
+  formatDisplayCurrency: (value: number, maximumFractionDigits?: number) => string
+  convertDisplayValue: (value: number) => number
   formatDate: (value: string | Date, options?: Intl.DateTimeFormatOptions) => string
   localizeErrorMessage: (message: string) => string
   getTypeLabel: (type: string) => string
@@ -669,10 +704,20 @@ const I18nContext = createContext<I18nContextValue | null>(null)
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('en')
+  const [displayCurrency, setDisplayCurrencyState] = useState<DisplayCurrency>('USD')
+  const [usdToDisplayRate, setUsdToDisplayRate] = useState(1)
 
   useEffect(() => {
     const savedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY)
     setLocaleState(isLocale(savedLocale) ? savedLocale : getBrowserLocale())
+
+    const savedDisplayCurrency = window.localStorage.getItem(DISPLAY_CURRENCY_STORAGE_KEY)
+    setDisplayCurrencyState(isDisplayCurrency(savedDisplayCurrency) ? savedDisplayCurrency : 'USD')
+
+    const savedExchangeRate = Number(window.localStorage.getItem(EXCHANGE_RATE_STORAGE_KEY))
+    if (Number.isFinite(savedExchangeRate) && savedExchangeRate > 0) {
+      setUsdToDisplayRate(savedExchangeRate)
+    }
   }, [])
 
   useEffect(() => {
@@ -680,20 +725,80 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en'
   }, [locale])
 
+  useEffect(() => {
+    window.localStorage.setItem(DISPLAY_CURRENCY_STORAGE_KEY, displayCurrency)
+  }, [displayCurrency])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadExchangeRate() {
+      try {
+        if (displayCurrency === 'USD') {
+          setUsdToDisplayRate(1)
+          window.localStorage.setItem(EXCHANGE_RATE_STORAGE_KEY, '1')
+          return
+        }
+
+        const response = await fetch(`/api/exchange-rate?base=USD&target=${displayCurrency}`, {
+          cache: 'no-store',
+        })
+
+        if (!response.ok) {
+          return
+        }
+
+        const payload = await response.json()
+        const nextRate = Number(payload?.rate)
+
+        if (!isMounted || !Number.isFinite(nextRate) || nextRate <= 0) {
+          return
+        }
+
+        setUsdToDisplayRate(nextRate)
+        window.localStorage.setItem(EXCHANGE_RATE_STORAGE_KEY, String(nextRate))
+      } catch {
+        // Keep the last known rate when the remote API is temporarily unavailable.
+      }
+    }
+
+    void loadExchangeRate()
+    const intervalId = window.setInterval(loadExchangeRate, 5 * 60 * 1000)
+
+    return () => {
+      isMounted = false
+      window.clearInterval(intervalId)
+    }
+  }, [displayCurrency])
+
   const value = useMemo<I18nContextValue>(() => {
     const t = (key: string, params?: TranslationParams) => translate(locale, key, params)
+    const formatCurrencyValue = (
+      value: number,
+      currency = 'USD',
+      maximumFractionDigits = 2,
+    ) =>
+      new Intl.NumberFormat(getIntlLocale(locale), {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: Math.min(2, maximumFractionDigits),
+        maximumFractionDigits,
+      }).format(value)
 
     return {
       locale,
       setLocale: setLocaleState,
+      displayCurrency,
+      setDisplayCurrency: setDisplayCurrencyState,
       t,
-      formatCurrency: (value, currency = 'USD', maximumFractionDigits = 2) =>
-        new Intl.NumberFormat(getIntlLocale(locale), {
-          style: 'currency',
-          currency,
-          minimumFractionDigits: Math.min(2, maximumFractionDigits),
+      formatCurrency: formatCurrencyValue,
+      formatDisplayCurrency: (value, maximumFractionDigits = 2) =>
+        formatCurrencyValue(
+          convertFromUsdBase(value, displayCurrency, usdToDisplayRate),
+          displayCurrency,
           maximumFractionDigits,
-        }).format(value),
+        ),
+      convertDisplayValue: (value) => convertFromUsdBase(value, displayCurrency, usdToDisplayRate),
       formatDate: (value, options) =>
         new Intl.DateTimeFormat(getIntlLocale(locale), {
           month: 'short',
@@ -716,7 +821,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       getStatusLabel: (status) => t(`statuses.${status}`),
       getDeleteConfirmationKeyword: () => (locale === 'zh' ? '删除' : 'DELETE'),
     }
-  }, [locale])
+  }, [displayCurrency, locale, usdToDisplayRate])
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }

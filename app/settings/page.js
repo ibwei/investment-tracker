@@ -43,14 +43,36 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { useI18n } from "@/lib/i18n";
+import { DISPLAY_CURRENCIES, useI18n } from "@/lib/i18n";
 import { useInvestmentStore } from "@/lib/store";
+
+const CURRENCY_LABELS = {
+  USD: "USD ($)",
+  CNY: "CNY (¥)",
+  EUR: "EUR (€)",
+  GBP: "GBP (£)",
+  JPY: "JPY (¥)",
+  HKD: "HKD (HK$)",
+  SGD: "SGD (S$)",
+  AUD: "AUD (A$)",
+  CAD: "CAD (C$)",
+  CHF: "CHF",
+  KRW: "KRW (₩)",
+  AED: "AED",
+};
 
 export default function SettingsPage() {
   const initialize = useInvestmentStore((state) => state.initialize);
   const investments = useInvestmentStore((state) => state.investments);
   const clearAllData = useInvestmentStore((state) => state.clearAllData);
-  const { locale, setLocale, t, localizeErrorMessage } = useI18n();
+  const {
+    locale,
+    setLocale,
+    displayCurrency,
+    setDisplayCurrency,
+    t,
+    localizeErrorMessage
+  } = useI18n();
 
   const [notifications, setNotifications] = useState({
     earnings: true,
@@ -58,7 +80,6 @@ export default function SettingsPage() {
     weekly: false,
     monthly: true
   });
-  const [currency, setCurrency] = useState("USD");
   const [timezone, setTimezone] = useState("UTC");
   const [profile, setProfile] = useState({
     name: "Demo User",
@@ -319,15 +340,16 @@ export default function SettingsPage() {
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label>{t("common.defaultCurrency")}</Label>
-                  <Select value={currency} onValueChange={setCurrency}>
+                  <Select value={displayCurrency} onValueChange={setDisplayCurrency}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                      <SelectItem value="GBP">GBP</SelectItem>
-                      <SelectItem value="CNY">CNY</SelectItem>
+                      {DISPLAY_CURRENCIES.map((currencyCode) => (
+                        <SelectItem key={currencyCode} value={currencyCode}>
+                          {CURRENCY_LABELS[currencyCode]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

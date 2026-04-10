@@ -18,7 +18,7 @@ import {
 
 export function EarningsChart() {
   const investments = useInvestmentStore((state) => state.investments)
-  const { t, formatCurrency, locale } = useI18n()
+  const { t, formatDisplayCurrency, locale } = useI18n()
 
   const chartData = useMemo(
     () => buildProjectedPortfolioSeries(investments, locale, 90),
@@ -48,7 +48,7 @@ export function EarningsChart() {
                 tickLine={false}
                 width={84}
                 tick={{ fill: 'oklch(0.6 0 0)', fontSize: 12 }}
-                tickFormatter={(value) => formatCurrency(value, 'USD', 0)}
+                tickFormatter={(value) => formatDisplayCurrency(value, 0)}
               />
               <Tooltip
                 contentStyle={{
@@ -65,7 +65,7 @@ export function EarningsChart() {
                     monthly: t('analytics.monthlyProjected'),
                   }
 
-                  return [formatCurrency(value), labelMap[name] ?? name]
+                  return [formatDisplayCurrency(value), labelMap[name] ?? name]
                 }}
               />
               <Legend

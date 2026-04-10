@@ -17,7 +17,7 @@ function formatPercent(value: number): string {
 
 export function StatsCards() {
   const investments = useInvestmentStore((state) => state.investments)
-  const { t, formatCurrency } = useI18n()
+  const { t, formatDisplayCurrency } = useI18n()
   
   const stats = useMemo(() => {
     const activeInvestments = investments.filter(i => i.status === 'active')
@@ -46,26 +46,26 @@ export function StatsCards() {
   const cards = [
     {
       title: t('stats.totalInvestment'),
-      value: formatCurrency(stats.totalInvestment),
+      value: formatDisplayCurrency(stats.totalInvestment),
       icon: Wallet,
       description: t('stats.activePositions', { count: stats.activeCount }),
       trend: null
     },
     {
       title: t('stats.dailyIncome'),
-      value: formatCurrency(stats.totalDailyIncome),
+      value: formatDisplayCurrency(stats.totalDailyIncome),
       icon: TrendingUp,
       description: t('stats.weeklyIncome', {
-        value: formatCurrency(stats.totalWeeklyIncome),
+        value: formatDisplayCurrency(stats.totalWeeklyIncome),
       }),
       trend: 'up' as const
     },
     {
       title: t('stats.monthlyIncome'),
-      value: formatCurrency(stats.totalMonthlyIncome),
+      value: formatDisplayCurrency(stats.totalMonthlyIncome),
       icon: Clock,
       description: t('stats.yearlyIncome', {
-        value: formatCurrency(stats.totalYearlyIncome),
+        value: formatDisplayCurrency(stats.totalYearlyIncome),
       }),
       trend: 'up' as const
     },

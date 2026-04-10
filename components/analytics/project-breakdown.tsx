@@ -24,7 +24,7 @@ const COLORS = [
 export function ProjectBreakdown() {
   const allInvestments = useInvestmentStore((state) => state.investments)
   const investments = useMemo(() => allInvestments.filter(i => i.status === 'active'), [allInvestments])
-  const { t, formatCurrency } = useI18n()
+  const { t, formatDisplayCurrency } = useI18n()
 
   const chartData = useMemo(() => {
     const projectTotals = new Map<string, number>()
@@ -76,7 +76,7 @@ export function ProjectBreakdown() {
                   boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                 }}
                 formatter={(value: number) => [
-                  formatCurrency(value, 'USD', 0),
+                  formatDisplayCurrency(value, 0),
                   t('analytics.amount')
                 ]}
               />
@@ -94,7 +94,7 @@ export function ProjectBreakdown() {
         </div>
         <div className="mt-2 text-center">
           <p className="text-sm text-muted-foreground">{t('analytics.totalInvested')}</p>
-          <p className="text-2xl font-semibold">{formatCurrency(total, 'USD', 0)}</p>
+          <p className="text-2xl font-semibold">{formatDisplayCurrency(total, 0)}</p>
         </div>
       </CardContent>
     </Card>

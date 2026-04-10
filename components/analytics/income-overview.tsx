@@ -13,7 +13,7 @@ import {
 
 export function IncomeOverview() {
   const investments = useInvestmentStore((state) => state.investments)
-  const { t, formatCurrency } = useI18n()
+  const { t, formatDisplayCurrency } = useI18n()
   
   const stats = useMemo(() => {
     const activeInvestments = investments.filter(i => i.status === 'active')
@@ -28,28 +28,28 @@ export function IncomeOverview() {
   const cards = [
     {
       title: t('analytics.dailyIncome'),
-      value: formatCurrency(stats.totalDailyIncome),
+      value: formatDisplayCurrency(stats.totalDailyIncome),
       icon: CalendarDays,
       color: 'text-chart-1',
       bgColor: 'bg-chart-1/10'
     },
     {
       title: t('analytics.weeklyIncome'),
-      value: formatCurrency(stats.totalWeeklyIncome),
+      value: formatDisplayCurrency(stats.totalWeeklyIncome),
       icon: CalendarRange,
       color: 'text-chart-2',
       bgColor: 'bg-chart-2/10'
     },
     {
       title: t('analytics.monthlyIncome'),
-      value: formatCurrency(stats.totalMonthlyIncome),
+      value: formatDisplayCurrency(stats.totalMonthlyIncome),
       icon: Calendar,
       color: 'text-chart-3',
       bgColor: 'bg-chart-3/10'
     },
     {
       title: t('analytics.yearlyIncome'),
-      value: formatCurrency(stats.totalYearlyIncome),
+      value: formatDisplayCurrency(stats.totalYearlyIncome),
       icon: CalendarClock,
       color: 'text-chart-4',
       bgColor: 'bg-chart-4/10'
