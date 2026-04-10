@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_URL = "https://cdn.moneyconvert.net/api/latest.json";
+const API_URL = "https://api.frankfurter.dev/v1/latest";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -15,13 +15,20 @@ export async function GET(request) {
   }
 
   try {
-    const response = await fetch(API_URL, {
+    const upstreamUrl = `${API_URL}?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(target)}`;
+    const response = await fetch(upstreamUrl, {
       next: { revalidate: 300 }
     });
 
     if (!response.ok) {
+      const details = await response.text();
       return NextResponse.json(
-        { error: "Failed to fetch exchange rate." },
+        {
+          error: "Failed to fetch exchange rate.",
+          source: "Frankfurter",
+          upstreamStatus: response.status,
+          details: details.slice(0, 200),
+        },
         { status: 502 }
       );
     }
@@ -31,7 +38,11 @@ export async function GET(request) {
 
     if (!Number.isFinite(rate) || rate <= 0) {
       return NextResponse.json(
-        { error: "Exchange rate is unavailable." },
+        {
+          error: "Exchange rate is unavailable.",
+          source: "Frankfurter",
+          details: "Upstream response did not include a valid target rate.",
+        },
         { status: 502 }
       );
     }
@@ -40,11 +51,16 @@ export async function GET(request) {
       base,
       target,
       rate,
-      source: "MoneyConvert",
+      date: payload?.date ?? null,
+      source: "Frankfurter",
     });
-  } catch {
+  } catch (error) {
     return NextResponse.json(
-      { error: "Failed to fetch exchange rate." },
+      {
+        error: "Failed to fetch exchange rate.",
+        source: "Frankfurter",
+        details: error instanceof Error ? error.message : "Unknown upstream error.",
+      },
       { status: 502 }
     );
   }
