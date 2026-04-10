@@ -73,8 +73,10 @@ export function PortfolioIncomeVolatility() {
                   border: '1px solid oklch(0.25 0.005 260)',
                   borderRadius: '8px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  color: 'oklch(0.95 0 0)',
                 }}
                 labelStyle={{ color: 'oklch(0.95 0 0)', marginBottom: '4px' }}
+                itemStyle={{ color: 'oklch(0.9 0 0)' }}
                 formatter={(value: number, name: string) => {
                   const labelMap: Record<string, string> = {
                     daily: t('analytics.dailyPortfolioIncome'),

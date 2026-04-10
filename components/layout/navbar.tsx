@@ -11,7 +11,6 @@ import {
   Compass,
   Menu,
   LogOut,
-  User,
   X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -98,12 +97,6 @@ export function Navbar() {
             </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link href="/settings" className="cursor-pointer">
-              <User className="h-4 w-4" />
-              {t('common.profile')}
-            </Link>
-          </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             className="cursor-pointer"
@@ -208,12 +201,6 @@ export function Navbar() {
                       <div className="truncate text-xs text-muted-foreground">{user.email}</div>
                     </div>
                   </div>
-                  <Link href="/settings" onClick={() => setMobileOpen(false)}>
-                    <Button variant="ghost" className="w-full justify-start">
-                      <User className="h-4 w-4" />
-                      {t('common.profile')}
-                    </Button>
-                  </Link>
                   <Button
                     variant="ghost"
                     className="w-full justify-start text-destructive hover:text-destructive"

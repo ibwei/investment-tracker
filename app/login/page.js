@@ -235,16 +235,6 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          {t("auth.footerAgreement")}{" "}
-          <Link href="#" className="underline hover:text-foreground">
-            {t("common.termsOfService")}
-          </Link>{" "}
-          and{" "}
-          <Link href="#" className="underline hover:text-foreground">
-            {t("common.privacyPolicy")}
-          </Link>
-        </p>
       </div>
     </div>
   );

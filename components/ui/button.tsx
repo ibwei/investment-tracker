@@ -52,6 +52,12 @@ function Button({
     loading?: boolean
   }) {
   const Comp = asChild ? Slot : 'button'
+  const content = asChild ? children : (
+    <>
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+      {children}
+    </>
+  )
 
   return (
     <Comp
@@ -61,8 +67,7 @@ function Button({
       aria-disabled={disabled || loading}
       {...props}
     >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-      {children}
+      {content}
     </Comp>
   )
 }
