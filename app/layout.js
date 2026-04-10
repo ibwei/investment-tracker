@@ -6,6 +6,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { getSession } from "@/lib/auth";
 import { getUserById } from "@/lib/users";
 import { Toaster } from "@/components/ui/sonner";
+import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -38,6 +39,7 @@ export default async function RootLayout({ children }) {
       <body
         className={`${inter.variable} ${geistMono.variable} bg-background font-sans text-foreground antialiased`}
       >
+        <Analytics />
         <AuthProvider initialUser={user}>
           <I18nProvider>
             {children}
