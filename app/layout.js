@@ -8,6 +8,12 @@ import { getUserById } from "@/lib/users";
 import { Toaster } from "@/components/ui/sonner";
 import { Analytics } from "@vercel/analytics/next"
 
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
+const siteName = "Earn Compass";
+const siteTitle = "Earn Compass - CeFi & DeFi Investment Management";
+const siteDescription =
+  "Track CeFi and DeFi investment positions, monitor real-time income, compare APR performance, and review portfolio snapshots in one dashboard.";
+
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter"
@@ -19,9 +25,71 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Earn Compass - CeFi & DeFi Investment Management",
-  description:
-    "Track and manage your CeFi and DeFi investments with real-time earnings analytics"
+  metadataBase: new URL(siteUrl),
+  applicationName: siteName,
+  title: {
+    default: siteTitle,
+    template: `%s | ${siteName}`
+  },
+  description: siteDescription,
+  keywords: [
+    "CeFi investment tracker",
+    "DeFi portfolio management",
+    "crypto yield dashboard",
+    "APR analytics",
+    "investment income tracker",
+    "portfolio snapshots",
+    "Earn Compass"
+  ],
+  authors: [{ name: siteName }],
+  creator: siteName,
+  publisher: siteName,
+  category: "finance",
+  alternates: {
+    canonical: "/"
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png", sizes: "512x512" },
+      { url: "/favicon.svg", type: "image/svg+xml" }
+    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/favicon.png", sizes: "512x512", type: "image/png" }]
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName,
+    title: siteTitle,
+    description: siteDescription,
+    locale: "en_US",
+    images: [
+      {
+        url: "/favicon.png",
+        width: 512,
+        height: 512,
+        alt: `${siteName} compass mark`
+      }
+    ]
+  },
+  twitter: {
+    card: "summary",
+    title: siteTitle,
+    description: siteDescription,
+    images: ["/favicon.png"]
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1
+    }
+  }
 };
 
 export const viewport = {

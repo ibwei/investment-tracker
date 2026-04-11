@@ -12,6 +12,7 @@ import {
   User
 } from "lucide-react";
 
+import { useAuth } from "@/components/auth-provider";
 import { Navbar } from "@/components/layout/navbar";
 import {
   AlertDialog,
@@ -90,10 +91,11 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
-    void initialize();
-  }, [initialize]);
+    void initialize({ preview: !isAuthenticated });
+  }, [initialize, isAuthenticated]);
 
   useEffect(() => {
     let isMounted = true;
@@ -418,7 +420,11 @@ export default function SettingsPage() {
                   }}
                 >
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="gap-2" disabled={isClearing}>
+                    <Button
+                      variant="destructive"
+                      className="gap-2"
+                      disabled={isClearing || !isAuthenticated}
+                    >
                       <Trash2 className="h-4 w-4" />
                       {t("common.clearAllData")}
                     </Button>

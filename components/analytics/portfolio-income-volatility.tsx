@@ -33,8 +33,8 @@ export function PortfolioIncomeVolatility() {
         <CardDescription>{t('analytics.portfolioIncomeVolatilityDescription')}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[320px] sm:h-[360px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-[320px] min-h-0 min-w-0 sm:h-[360px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="portfolioDailyGradient" x1="0" y1="0" x2="0" y2="1">

@@ -195,6 +195,10 @@ export const useInvestmentStore = create<InvestmentStore>()(
       },
 
       addInvestment: async (data) => {
+        if (get().isPreviewMode) {
+          return
+        }
+
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().create(mapFormToPayload(data))
@@ -209,6 +213,10 @@ export const useInvestmentStore = create<InvestmentStore>()(
       },
 
       updateInvestment: async (id, data) => {
+        if (get().isPreviewMode) {
+          return
+        }
+
         const current = get().investments.find((investment) => investment.id === id)
         if (!current) {
           return
@@ -247,6 +255,10 @@ export const useInvestmentStore = create<InvestmentStore>()(
       },
 
       deleteInvestment: async (id) => {
+        if (get().isPreviewMode) {
+          return
+        }
+
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().remove(id, 'DELETE')
@@ -265,6 +277,10 @@ export const useInvestmentStore = create<InvestmentStore>()(
       },
 
       endInvestment: async (id, data) => {
+        if (get().isPreviewMode) {
+          return
+        }
+
         const current = get().investments.find((investment) => investment.id === id)
         if (!current) {
           return
@@ -290,6 +306,16 @@ export const useInvestmentStore = create<InvestmentStore>()(
       },
 
       clearAllData: async () => {
+        if (get().isPreviewMode) {
+          set({
+            investments: previewInvestments,
+            isPreviewMode: true,
+            isLoading: false,
+            errorMessage: '',
+          })
+          return
+        }
+
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().clearAll()

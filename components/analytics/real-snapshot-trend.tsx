@@ -169,8 +169,8 @@ export function RealSnapshotTrend() {
         ) : null}
 
         {chartData.length > 0 ? (
-          <div className="h-[320px] sm:h-[360px]">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[320px] min-h-0 min-w-0 sm:h-[360px]">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.3 0 0)" vertical={false} />
                 <XAxis
