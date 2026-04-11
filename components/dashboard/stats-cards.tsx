@@ -81,14 +81,17 @@ export function StatsCards() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {cards.map((card) => (
-        <Card key={card.title} className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardContent className="p-6">
+        <Card
+          key={card.title}
+          className="gap-0 py-0 border-border/50 bg-card/50 backdrop-blur-sm"
+        >
+          <CardContent className="p-4 sm:p-5 lg:p-6">
             <div className="flex items-start justify-between">
-              <div className="space-y-2">
+              <div className="space-y-1.5 sm:space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">
                   {card.title}
                 </p>
-                <p className="text-2xl font-semibold tracking-tight">
+                <p className="text-xl font-semibold tracking-tight sm:text-2xl">
                   {card.value}
                 </p>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -98,8 +101,8 @@ export function StatsCards() {
                   {card.description}
                 </p>
               </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <card.icon className="h-5 w-5 text-primary" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 sm:h-10 sm:w-10">
+                <card.icon className="h-4 w-4 text-primary sm:h-5 sm:w-5" />
               </div>
             </div>
           </CardContent>
