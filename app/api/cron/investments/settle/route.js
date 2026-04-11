@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { autoSettleMaturedInvestments } from "@/lib/investments";
-import {
-  captureSnapshotsForRemoteUsers,
-  writeScheduledJobLog
-} from "@/lib/snapshot-history";
+import { writeScheduledJobLog } from "@/lib/snapshot-history";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,24 +31,29 @@ function isAuthorized(request) {
   return bearerToken === secret || headerToken === secret;
 }
 
+function toHourlyRunKey(value = new Date()) {
+  const date = new Date(value);
+  date.setUTCMinutes(0, 0, 0);
+  return date.toISOString();
+}
+
 export async function GET(request) {
   if (!isAuthorized(request)) {
     return unauthorized();
   }
 
   const startedAt = new Date();
-  const runDate = startedAt.toISOString().slice(0, 10);
+  const runDate = toHourlyRunKey(startedAt);
 
   try {
-    await autoSettleMaturedInvestments(startedAt);
-    const result = await captureSnapshotsForRemoteUsers(startedAt);
+    const result = await autoSettleMaturedInvestments(startedAt);
     const finishedAt = new Date();
 
     await writeScheduledJobLog({
-      jobName: "portfolio-snapshot-capture",
+      jobName: "investment-auto-settle",
       runDate,
       status: "SUCCESS",
-      processedCount: result.processedInvestments,
+      processedCount: result.settledCount,
       durationMs: finishedAt.getTime() - startedAt.getTime(),
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString()
@@ -62,12 +64,12 @@ export async function GET(request) {
     const finishedAt = new Date();
 
     await writeScheduledJobLog({
-      jobName: "portfolio-snapshot-capture",
+      jobName: "investment-auto-settle",
       runDate,
       status: "FAILED",
       processedCount: 0,
       durationMs: finishedAt.getTime() - startedAt.getTime(),
-      errorMessage: error?.message ?? "Snapshot capture failed.",
+      errorMessage: error?.message ?? "Investment auto-settle failed.",
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString()
     });

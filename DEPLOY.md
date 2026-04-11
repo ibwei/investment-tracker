@@ -11,6 +11,7 @@
 
 ## Snapshot Cron
 
+- `vercel.json` schedules `/api/cron/investments/settle` every 4 hours in `UTC` to convert matured `ONGOING` investments into `ENDED`.
 - `vercel.json` schedules `/api/cron/snapshots` at `12:00 UTC` every day.
 - `12:00 UTC` equals `20:00` in `Asia/Shanghai`.
 - The cron route requires `CRON_SECRET`.
