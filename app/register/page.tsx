@@ -17,7 +17,6 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -40,10 +39,7 @@ function createRegisterSchema(t) {
       name: z.string().min(2, t("validation.nameMin")),
       email: z.string().email(t("validation.validEmail")),
       password: z.string().min(8, t("validation.passwordMin")),
-      confirmPassword: z.string(),
-      terms: z
-        .boolean()
-        .refine((value) => value === true, t("validation.acceptTerms"))
+      confirmPassword: z.string()
     })
     .refine((data) => data.password === data.confirmPassword, {
       message: t("validation.passwordsMismatch"),
@@ -71,8 +67,7 @@ export default function RegisterPage() {
       name: "",
       email: "",
       password: "",
-      confirmPassword: "",
-      terms: false
+      confirmPassword: ""
     }
   });
 
@@ -246,34 +241,6 @@ export default function RegisterPage() {
                         />
                       </FormControl>
                       <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="terms"
-                  render={({ field }) => (
-                    <FormItem className="flex items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel className="text-sm font-normal">
-                          {t("auth.agreeToTermsPrefix")}{" "}
-                          <Link href="#" className="text-primary hover:underline">
-                            {t("common.termsOfService")}
-                          </Link>{" "}
-                          and{" "}
-                          <Link href="#" className="text-primary hover:underline">
-                            {t("common.privacyPolicy")}
-                          </Link>
-                        </FormLabel>
-                        <FormMessage />
-                      </div>
                     </FormItem>
                   )}
                 />

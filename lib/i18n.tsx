@@ -72,8 +72,6 @@ const translations = {
       email: 'Email',
       password: 'Password',
       confirmPassword: 'Confirm Password',
-      termsOfService: 'Terms of Service',
-      privacyPolicy: 'Privacy Policy',
       providers: {
         google: 'Google',
         github: 'GitHub',
@@ -216,7 +214,6 @@ const translations = {
       validEmail: 'Please enter a valid email',
       passwordMin: 'Password must be at least 8 characters',
       nameMin: 'Name must be at least 2 characters',
-      acceptTerms: 'You must accept the terms',
       passwordsMismatch: "Passwords don't match",
     },
     analytics: {
@@ -314,8 +311,6 @@ const translations = {
       registerSuccess: 'Account created successfully',
       loginFailed: 'Login failed.',
       registerFailed: 'Registration failed.',
-      agreeToTermsPrefix: 'I agree to the',
-      footerAgreement: 'By continuing, you agree to our',
       continueWithProvider: 'Continue with {provider}',
     },
     passwordRules: {
@@ -381,8 +376,6 @@ const translations = {
       email: '邮箱',
       password: '密码',
       confirmPassword: '确认密码',
-      termsOfService: '服务条款',
-      privacyPolicy: '隐私政策',
       providers: {
         google: 'Google',
         github: 'GitHub',
@@ -522,7 +515,6 @@ const translations = {
       validEmail: '请输入有效邮箱地址',
       passwordMin: '密码至少需要 8 位',
       nameMin: '名称至少需要 2 个字符',
-      acceptTerms: '请先同意条款',
       passwordsMismatch: '两次输入的密码不一致',
     },
     analytics: {
@@ -619,8 +611,6 @@ const translations = {
       registerSuccess: '账户创建成功',
       loginFailed: '登录失败。',
       registerFailed: '注册失败。',
-      agreeToTermsPrefix: '我同意',
-      footerAgreement: '继续即表示你同意我们的',
       continueWithProvider: '使用 {provider} 继续',
     },
     passwordRules: {
