@@ -4,19 +4,23 @@
 
 - `DATABASE_URL`: PostgreSQL connection string used by Prisma in production.
 - `AUTH_SECRET`: long random string for signing session cookies.
-- `CRON_SECRET`: long random string used by `/api/cron/snapshots`.
+- `CRON_SECRET`: long random string used by cron routes.
+- `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
+- `RESEND_FROM_EMAIL`: sender identity for reminder emails, for example `CeFiDeFi <alerts@yourdomain.com>`.
 - `APP_URL`: your production app URL, for example `https://your-project.vercel.app`.
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: optional, if Google OAuth is enabled.
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`: optional, if GitHub OAuth is enabled.
 
-## Snapshot Cron
+## Scheduled Jobs
 
-- `vercel.json` schedules `/api/cron/investments/settle` every 4 hours in `UTC` to convert matured `ONGOING` investments into `ENDED`.
-- `vercel.json` schedules `/api/cron/snapshots` at `12:00 UTC` every day.
+- `vercel.json` schedules `/api/cron/snapshots` at `12:00 UTC` every day. This route also converts matured `ONGOING` investments into `ENDED` before capturing snapshots.
+- `vercel.json` schedules `/api/cron/investments/expiry-reminders` at `02:00 UTC` every day.
 - `12:00 UTC` equals `20:00` in `Asia/Shanghai`.
+- `02:00 UTC` equals `10:00` in `Asia/Shanghai`.
 - The cron route requires `CRON_SECRET`.
 - On Vercel Production, cron invocations automatically include `Authorization: Bearer <CRON_SECRET>`.
 - The route also accepts `x-cron-secret` so you can test it manually from tools like `curl` or Postman.
+- The expiry reminder route emails each active user with `ONGOING` investments every day. Investments expiring in the next 24 hours are shown first, followed by the user's other active investments.
 
 ## First Production Deploy
 

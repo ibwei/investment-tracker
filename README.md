@@ -46,6 +46,8 @@ DATABASE_URL="postgresql://..."
 AUTH_SECRET="replace-with-a-long-random-string"
 CRON_SECRET="replace-with-a-long-random-string"
 APP_URL="http://localhost:3000"
+RESEND_API_KEY="..."
+RESEND_FROM_EMAIL="CeFiDeFi <alerts@yourdomain.com>"
 ```
 
 如需启用 OAuth，再补充：
@@ -102,7 +104,7 @@ tech.md                  最新技术文档
 - 鉴权使用自定义 session cookie，不依赖 NextAuth
 - 数据库当前为 PostgreSQL，不是旧文档中的 SQLite
 - 未登录态使用内置 preview 数据，不可写
-- 定时任务会为远程用户生成投资快照和组合快照
+- 定时任务会为远程用户生成投资快照和组合快照，并在用户有活跃投资时每天发送邮件摘要，24 小时内到期项目会优先展示
 
 ## 部署
 
@@ -114,6 +116,8 @@ tech.md                  最新技术文档
 - `AUTH_SECRET`
 - `CRON_SECRET`
 - `APP_URL`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
 
 ## 文档
 
