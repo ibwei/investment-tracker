@@ -78,6 +78,7 @@ export interface AuthUser {
   role: string
   status: string
   storageMode: string
+  timezone: string
   createdAt: string
   updatedAt: string
 }

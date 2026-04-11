@@ -29,7 +29,7 @@ interface PortfolioSnapshot {
 }
 
 export function RealSnapshotTrend() {
-  const { t, formatDisplayCurrency, locale } = useI18n()
+  const { t, formatDate, formatDisplayCurrency } = useI18n()
   const { isAuthenticated } = useAuth()
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -99,12 +99,12 @@ export function RealSnapshotTrend() {
     () =>
       snapshots.map((snapshot) => ({
         ...snapshot,
-        label: new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+        label: formatDate(snapshot.snapshotDate, {
           month: 'short',
           day: 'numeric',
-        }).format(new Date(`${snapshot.snapshotDate}T12:00:00`)),
+        }),
       })),
-    [locale, snapshots],
+    [formatDate, snapshots],
   )
 
   const latestSnapshot = snapshots[snapshots.length - 1]

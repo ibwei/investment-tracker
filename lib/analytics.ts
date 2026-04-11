@@ -1,18 +1,20 @@
 import type { Investment } from '@/lib/types'
+import { formatInAppTimeZone, parseAppDate, startOfAppDay, toAppDateKey } from '@/lib/time'
 
 const DAY_MS = 1000 * 60 * 60 * 24
 
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0)
+function startOfDay(date: Date, timeZone: string) {
+  const start = startOfAppDay(date, timeZone)
+  return start ? start.toDate() : date
 }
 
-function parseDate(value: string) {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : startOfDay(parsed)
+function parseDate(value: string, timeZone: string) {
+  const parsed = parseAppDate(value, timeZone)
+  return parsed ? startOfDay(parsed.toDate(), timeZone) : null
 }
 
-function isInvestmentActiveOnDate(investment: Investment, date: Date) {
-  const startDate = parseDate(investment.startDate)
+function isInvestmentActiveOnDate(investment: Investment, date: Date, timeZone: string) {
+  const startDate = parseDate(investment.startDate, timeZone)
   if (!startDate || startDate.getTime() > date.getTime()) {
     return false
   }
@@ -21,16 +23,17 @@ function isInvestmentActiveOnDate(investment: Investment, date: Date) {
     return true
   }
 
-  const endDate = parseDate(investment.endDate || investment.startDate)
+  const endDate = parseDate(investment.endDate || investment.startDate, timeZone)
   return endDate ? endDate.getTime() >= date.getTime() : false
 }
 
 export function buildProjectedPortfolioSeries(
   investments: Investment[],
   locale: 'en' | 'zh',
+  timeZone: string,
   days = 90,
 ) {
-  const today = startOfDay(new Date())
+  const today = startOfDay(new Date(), timeZone)
   let cumulativeIncome = 0
 
   return Array.from({ length: days }, (_, index) => {
@@ -42,7 +45,7 @@ export function buildProjectedPortfolioSeries(
     let activeCount = 0
 
     investments.forEach((investment) => {
-      if (!isInvestmentActiveOnDate(investment, date)) {
+      if (!isInvestmentActiveOnDate(investment, date, timeZone)) {
         return
       }
 
@@ -56,11 +59,11 @@ export function buildProjectedPortfolioSeries(
     cumulativeIncome += daily
 
     return {
-      isoDate: date.toISOString().slice(0, 10),
-      label: new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+      isoDate: toAppDateKey(date, timeZone),
+      label: formatInAppTimeZone(date, locale === 'zh' ? 'zh-CN' : 'en-US', {
         month: 'short',
         day: 'numeric',
-      }).format(date),
+      }, timeZone),
       daily,
       weekly,
       monthly,

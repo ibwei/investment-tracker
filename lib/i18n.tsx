@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { DEFAULT_APP_TIMEZONE, formatInAppTimeZone, isSupportedTimeZone } from '@/lib/time'
 
 type Locale = 'en' | 'zh'
 
@@ -16,6 +17,7 @@ type TranslationParams = Record<string, string | number>
 const LOCALE_STORAGE_KEY = 'earn-compass-locale'
 const DISPLAY_CURRENCY_STORAGE_KEY = 'earn-compass-display-currency'
 const EXCHANGE_RATE_STORAGE_KEY = 'earn-compass-usd-display-rate'
+const TIMEZONE_STORAGE_KEY = 'earn-compass-timezone'
 
 export const DISPLAY_CURRENCIES = [
   'USD',
@@ -78,6 +80,7 @@ const translations = {
       },
       displayName: 'Display Name',
       timezone: 'Timezone',
+      timezoneValue: DEFAULT_APP_TIMEZONE,
       defaultCurrency: 'Default Currency',
       currency: 'Currency',
       profile: 'Profile',
@@ -386,6 +389,7 @@ const translations = {
       },
       displayName: '显示名称',
       timezone: '时区',
+      timezoneValue: DEFAULT_APP_TIMEZONE,
       defaultCurrency: '默认币种',
       currency: '币种',
       profile: '个人资料',
@@ -737,6 +741,8 @@ type I18nContextValue = {
   setLocale: (locale: Locale) => void
   displayCurrency: DisplayCurrency
   setDisplayCurrency: (currency: DisplayCurrency) => void
+  timezone: string
+  setTimezone: (timezone: string) => void
   t: (key: string, params?: TranslationParams) => string
   formatCurrency: (value: number, currency?: string, maximumFractionDigits?: number) => string
   formatDisplayCurrency: (value: number, maximumFractionDigits?: number) => string
@@ -753,6 +759,7 @@ const I18nContext = createContext<I18nContextValue | null>(null)
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('en')
   const [displayCurrency, setDisplayCurrencyState] = useState<DisplayCurrency>('USD')
+  const [timezone, setTimezoneState] = useState(DEFAULT_APP_TIMEZONE)
   const [usdToDisplayRate, setUsdToDisplayRate] = useState(1)
 
   useEffect(() => {
@@ -761,6 +768,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
     const savedDisplayCurrency = window.localStorage.getItem(DISPLAY_CURRENCY_STORAGE_KEY)
     setDisplayCurrencyState(isDisplayCurrency(savedDisplayCurrency) ? savedDisplayCurrency : 'USD')
+
+    const savedTimezone = window.localStorage.getItem(TIMEZONE_STORAGE_KEY)
+    setTimezoneState(isSupportedTimeZone(savedTimezone) ? savedTimezone : DEFAULT_APP_TIMEZONE)
 
     const savedExchangeRate = Number(window.localStorage.getItem(EXCHANGE_RATE_STORAGE_KEY))
     if (Number.isFinite(savedExchangeRate) && savedExchangeRate > 0) {
@@ -776,6 +786,35 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     window.localStorage.setItem(DISPLAY_CURRENCY_STORAGE_KEY, displayCurrency)
   }, [displayCurrency])
+
+  useEffect(() => {
+    window.localStorage.setItem(TIMEZONE_STORAGE_KEY, timezone)
+  }, [timezone])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadUserPreferences() {
+      try {
+        const response = await fetch('/api/auth/session', { cache: 'no-store' })
+        const payload = await response.json()
+
+        if (!isMounted || !isSupportedTimeZone(payload?.user?.timezone)) {
+          return
+        }
+
+        setTimezoneState(payload.user.timezone)
+      } catch {
+        // Keep the local preference when the user profile cannot be loaded.
+      }
+    }
+
+    void loadUserPreferences()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -839,6 +878,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       setLocale: setLocaleState,
       displayCurrency,
       setDisplayCurrency: setDisplayCurrencyState,
+      timezone,
+      setTimezone: setTimezoneState,
       t,
       formatCurrency: formatCurrencyValue,
       formatDisplayCurrency: (value, maximumFractionDigits = 2) =>
@@ -849,7 +890,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         ),
       convertDisplayValue: (value) => convertFromUsdBase(value, displayCurrency, usdToDisplayRate),
       formatDate: (value, options) =>
-        new Intl.DateTimeFormat(getIntlLocale(locale), {
+        formatInAppTimeZone(value, getIntlLocale(locale), {
           month: 'short',
           day: 'numeric',
           year: 'numeric',
@@ -861,7 +902,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
               }
             : {}),
           ...options,
-        }).format(typeof value === 'string' ? new Date(value) : value),
+        }, timezone),
       localizeErrorMessage: (message) => {
         const key = serverErrorKeyMap[message]
         return key ? t(key) : message
@@ -870,7 +911,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       getStatusLabel: (status) => t(`statuses.${status}`),
       getDeleteConfirmationKeyword: () => (locale === 'zh' ? '删除' : 'DELETE'),
     }
-  }, [displayCurrency, locale, usdToDisplayRate])
+  }, [displayCurrency, locale, timezone, usdToDisplayRate])
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }

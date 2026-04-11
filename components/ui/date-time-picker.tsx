@@ -3,6 +3,7 @@
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { ConfigProvider, DatePicker } from 'antd'
+import { toInputDateTimeValue, toUtcISOString } from '@/lib/time'
 
 dayjs.extend(customParseFormat)
 
@@ -23,7 +24,7 @@ function toDayjs(value?: string) {
     return null
   }
 
-  const parsed = dayjs(value, [STORAGE_FORMAT, DISPLAY_FORMAT], true)
+  const parsed = dayjs(toInputDateTimeValue(value), [STORAGE_FORMAT, DISPLAY_FORMAT], true)
   return parsed.isValid() ? parsed : dayjs(value)
 }
 
@@ -58,7 +59,9 @@ export function DateTimePicker({
         placeholder={placeholder}
         disabled={disabled}
         onBlur={onBlur}
-        onChange={(nextValue) => onChange?.(nextValue ? nextValue.format(STORAGE_FORMAT) : '')}
+        onChange={(nextValue) =>
+          onChange?.(nextValue ? toUtcISOString(nextValue.format(STORAGE_FORMAT)) : '')
+        }
         getPopupContainer={() => document.body}
         popupClassName="earn-date-time-popup"
         popupStyle={{ zIndex: 1600 }}

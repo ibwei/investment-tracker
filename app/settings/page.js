@@ -44,6 +44,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { DISPLAY_CURRENCIES, useI18n } from "@/lib/i18n";
+import { DEFAULT_APP_TIMEZONE, TIMEZONE_OPTIONS } from "@/lib/time";
 import { useInvestmentStore } from "@/lib/store";
 
 const CURRENCY_LABELS = {
@@ -70,6 +71,8 @@ export default function SettingsPage() {
     setLocale,
     displayCurrency,
     setDisplayCurrency,
+    timezone,
+    setTimezone,
     t,
     localizeErrorMessage
   } = useI18n();
@@ -80,7 +83,6 @@ export default function SettingsPage() {
     weekly: false,
     monthly: true
   });
-  const [timezone, setTimezone] = useState("UTC");
   const [profile, setProfile] = useState({
     name: "Demo User",
     email: "demo@example.com"
@@ -111,6 +113,7 @@ export default function SettingsPage() {
           name: payload.user.name || "",
           email: payload.user.email || ""
         });
+        setTimezone(payload.user.timezone || DEFAULT_APP_TIMEZONE);
       } catch {
         // Keep prototype defaults when no logged-in session exists.
       }
@@ -132,7 +135,10 @@ export default function SettingsPage() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(profile)
+        body: JSON.stringify({
+          ...profile,
+          timezone
+        })
       });
 
       if (!response.ok) {
@@ -360,10 +366,11 @@ export default function SettingsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="UTC">UTC</SelectItem>
-                      <SelectItem value="EST">EST (UTC-5)</SelectItem>
-                      <SelectItem value="PST">PST (UTC-8)</SelectItem>
-                      <SelectItem value="CST">CST (UTC+8)</SelectItem>
+                      {TIMEZONE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

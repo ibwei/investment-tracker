@@ -18,11 +18,11 @@ import {
 
 export function EarningsChart() {
   const investments = useInvestmentStore((state) => state.investments)
-  const { t, formatDisplayCurrency, locale } = useI18n()
+  const { t, formatDisplayCurrency, locale, timezone } = useI18n()
 
   const chartData = useMemo(
-    () => buildProjectedPortfolioSeries(investments, locale, 90),
-    [investments, locale],
+    () => buildProjectedPortfolioSeries(investments, locale, timezone, 90),
+    [investments, locale, timezone],
   )
 
   return (
