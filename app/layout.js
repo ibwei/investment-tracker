@@ -6,7 +6,8 @@ import { I18nProvider } from "@/lib/i18n";
 import { getSession } from "@/lib/auth";
 import { getUserById } from "@/lib/users";
 import { Toaster } from "@/components/ui/sonner";
-import { Analytics } from "@vercel/analytics/next"
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
 const siteName = "Earn Compass";
@@ -108,6 +109,7 @@ export default async function RootLayout({ children }) {
         className={`${inter.variable} ${geistMono.variable} bg-background font-sans text-foreground antialiased`}
       >
         <Analytics />
+        <SpeedInsights />
         <AuthProvider initialUser={user}>
           <I18nProvider>
             {children}
