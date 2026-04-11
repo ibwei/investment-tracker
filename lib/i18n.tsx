@@ -100,6 +100,15 @@ const translations = {
       subtitle: 'Track and manage your CeFi & DeFi investments',
       portfolio: 'Investment Portfolio',
     },
+    preview: {
+      dashboardTitle: 'Preview Mode',
+      dashboardDescription: 'Browse sample positions, income states, and settlement scenarios before signing in. This data is fictional and read-only.',
+      analyticsTitle: 'Analytics Preview',
+      analyticsDescription: 'Explore sample trends, allocations, and snapshot history with mock data before connecting your own account.',
+      readOnlyHint: 'Preview mode is read-only. Sign in to add, edit, end, or delete investments.',
+      snapshotDescription: 'Guest mode shows illustrative snapshot history only. Sign in to capture and store your real portfolio snapshots.',
+      viewActions: 'Log in',
+    },
     stats: {
       totalInvestment: 'Total Investment',
       dailyIncome: 'Daily Income',
@@ -398,6 +407,15 @@ const translations = {
       title: '投资仪表盘',
       subtitle: '追踪并管理你的 CeFi 与 DeFi 投资',
       portfolio: '投资组合',
+    },
+    preview: {
+      dashboardTitle: '预览模式',
+      dashboardDescription: '未登录时先展示一组只读示例仓位，覆盖进行中、自然结束、提前结束等场景。所有数据均为虚构示例。',
+      analyticsTitle: '分析页预览',
+      analyticsDescription: '未登录也可以先查看模拟收益趋势、仓位分布和快照历史，登录后再切换到你的真实数据。',
+      readOnlyHint: '当前为只读预览模式。登录后即可新增、编辑、结束或删除投资。',
+      snapshotDescription: '游客模式下展示的是示例快照历史，不会写入真实快照；登录后才能采集并保存你的真实组合快照。',
+      viewActions: '去登录',
     },
     stats: {
       totalInvestment: '总投资额',

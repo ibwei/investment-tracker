@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 
+import { useAuth } from "@/components/auth-provider";
 import { IncomeOverview } from "@/components/analytics/income-overview";
 import { Navbar } from "@/components/layout/navbar";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useInvestmentStore } from "@/lib/store";
 
@@ -50,11 +54,13 @@ const RealSnapshotTrend = dynamic(
 
 export default function AnalyticsPage() {
   const initialize = useInvestmentStore((state) => state.initialize);
+  const isPreviewMode = useInvestmentStore((state) => state.isPreviewMode);
+  const { isAuthenticated } = useAuth();
   const { t } = useI18n();
 
   useEffect(() => {
-    void initialize();
-  }, [initialize]);
+    void initialize({ preview: !isAuthenticated });
+  }, [initialize, isAuthenticated]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -69,6 +75,29 @@ export default function AnalyticsPage() {
             {t("analytics.subtitle")}
           </p>
         </div>
+
+        {isPreviewMode ? (
+          <Card className="mb-8 border-primary/20 bg-primary/5">
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">
+                  {t("preview.analyticsTitle")}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t("preview.analyticsDescription")}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Button asChild size="sm">
+                  <Link href="/register">{t("nav.getStarted")}</Link>
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/login">{t("nav.login")}</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <section className="mb-8">
           <IncomeOverview />

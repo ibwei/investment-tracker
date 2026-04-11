@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware'
 import { getInvestmentRepository } from '@/lib/storage/repositories'
 import { STORAGE_MODES } from '@/lib/storage-mode'
 import { useAppStore } from '@/store/app-store'
+import { previewInvestments } from '@/lib/preview-data'
 import type {
   EndInvestmentData,
   FilterOptions,
@@ -124,13 +125,14 @@ function getRepository() {
 
 interface InvestmentStore {
   investments: Investment[]
+  isPreviewMode: boolean
   filters: FilterOptions
   sortField: SortField
   sortDirection: SortDirection
   isLoading: boolean
   errorMessage: string
   hasInitialized: boolean
-  initialize: () => Promise<void>
+  initialize: (options?: { preview?: boolean }) => Promise<void>
   addInvestment: (data: InvestmentFormData) => Promise<void>
   updateInvestment: (id: string, data: Partial<InvestmentFormData>) => Promise<void>
   deleteInvestment: (id: string) => Promise<void>
@@ -148,6 +150,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
   persist(
     (set, get) => ({
       investments: [],
+      isPreviewMode: false,
       filters: {
         project: '',
         type: 'all',
@@ -160,17 +163,30 @@ export const useInvestmentStore = create<InvestmentStore>()(
       errorMessage: '',
       hasInitialized: false,
 
-      initialize: async () => {
+      initialize: async (options = {}) => {
+        if (options.preview) {
+          set({
+            investments: previewInvestments,
+            isPreviewMode: true,
+            isLoading: false,
+            errorMessage: '',
+            hasInitialized: true,
+          })
+          return
+        }
+
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().getSnapshot()
           set({
             investments: mapSnapshot(snapshot),
+            isPreviewMode: false,
             isLoading: false,
             hasInitialized: true,
           })
         } catch (error: any) {
           set({
+            isPreviewMode: false,
             isLoading: false,
             hasInitialized: true,
             errorMessage: error?.message ?? 'Failed to load investments.',
@@ -245,7 +261,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
       },
 
       restoreInvestment: async () => {
-        await get().initialize()
+        await get().initialize({ preview: get().isPreviewMode })
       },
 
       endInvestment: async (id, data) => {

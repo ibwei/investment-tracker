@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '@/components/auth-provider'
 import { useI18n } from '@/lib/i18n'
+import { previewSnapshots } from '@/lib/preview-data'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -28,12 +30,20 @@ interface PortfolioSnapshot {
 
 export function RealSnapshotTrend() {
   const { t, formatDisplayCurrency, locale } = useI18n()
+  const { isAuthenticated } = useAuth()
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCapturing, setIsCapturing] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
   async function loadSnapshots() {
+    if (!isAuthenticated) {
+      setSnapshots(previewSnapshots)
+      setErrorMessage('')
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -58,9 +68,13 @@ export function RealSnapshotTrend() {
 
   useEffect(() => {
     void loadSnapshots()
-  }, [])
+  }, [isAuthenticated])
 
   async function handleCapture() {
+    if (!isAuthenticated) {
+      return
+    }
+
     setIsCapturing(true)
 
     try {
@@ -102,11 +116,23 @@ export function RealSnapshotTrend() {
           <CardTitle className="text-lg font-medium">{t('analytics.snapshotTrend')}</CardTitle>
           <CardDescription>{t('analytics.snapshotTrendDescription')}</CardDescription>
         </div>
-        <Button variant="outline" size="sm" onClick={handleCapture} loading={isCapturing}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCapture}
+          loading={isCapturing}
+          disabled={!isAuthenticated}
+        >
           {t('analytics.captureSnapshot')}
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
+        {!isAuthenticated ? (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+            {t('preview.snapshotDescription')}
+          </div>
+        ) : null}
+
         {errorMessage ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {errorMessage}

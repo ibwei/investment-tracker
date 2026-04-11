@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useInvestmentStore } from '@/lib/store'
 import { useI18n } from '@/lib/i18n'
 import type { EndInvestmentData, Investment, SortField, SortDirection } from '@/lib/types'
@@ -108,6 +109,7 @@ function SortableHeader({ field, children, currentField, direction, onSort }: So
 
 interface InvestmentTableProps {
   onEdit: (investment: Investment) => void
+  isReadOnly?: boolean
 }
 
 interface EndDialogState {
@@ -172,8 +174,9 @@ function isActiveInvestment(status: Investment['status']) {
   return status === 'active'
 }
 
-export function InvestmentTable({ onEdit }: InvestmentTableProps) {
+export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableProps) {
   const allInvestments = useInvestmentStore((state) => state.investments)
+  const isPreviewMode = useInvestmentStore((state) => state.isPreviewMode)
   const filters = useInvestmentStore((state) => state.filters)
   const sortField = useInvestmentStore((state) => state.sortField)
   const sortDirection = useInvestmentStore((state) => state.sortDirection)
@@ -387,6 +390,11 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
   )
 
   const renderActionCell = (investment: Investment) => (
+    isReadOnly ? (
+      <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-primary hover:text-primary">
+        <Link href="/login">{t('preview.viewActions')}</Link>
+      </Button>
+    ) : (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -414,11 +422,18 @@ export function InvestmentTable({ onEdit }: InvestmentTableProps) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    )
   )
 
   return (
     <>
       <div className="space-y-6">
+        {isPreviewMode ? (
+          <div className="rounded-lg border border-dashed border-border/70 bg-background/40 px-4 py-3 text-sm text-muted-foreground">
+            {t('preview.readOnlyHint')}
+          </div>
+        ) : null}
+
         <Card className="gap-0 overflow-hidden border-border/50 bg-card/30 backdrop-blur-sm">
           <CardHeader className="border-b border-border/40">
             <CardTitle>{t('table.activeInvestments')}</CardTitle>
