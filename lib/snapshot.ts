@@ -6,7 +6,7 @@ import {
   STATUS_LABELS
 } from "@/lib/calculations";
 
-export function normalizeInvestmentRecord(record, referenceDate = new Date(), timeZone) {
+export function normalizeInvestmentRecord(record, referenceDate = new Date(), timeZone = undefined) {
   const normalized = {
     id: record.id,
     project: record.project ?? "",
@@ -39,7 +39,7 @@ export function normalizeInvestmentRecord(record, referenceDate = new Date(), ti
   };
 }
 
-export function buildDashboardSnapshot(records, referenceDate = new Date(), timeZone) {
+export function buildDashboardSnapshot(records, referenceDate = new Date(), timeZone = undefined) {
   const normalized = records
     .filter((record) => !record.isDeleted && !record.is_deleted)
     .map((record) => normalizeInvestmentRecord(record, referenceDate, timeZone));

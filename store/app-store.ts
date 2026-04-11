@@ -2,9 +2,14 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { STORAGE_MODES } from "@/lib/storage-mode";
+import { STORAGE_MODES, type StorageMode } from "@/lib/storage-mode";
 
-export const useAppStore = create(
+interface AppStore {
+  storageMode: StorageMode;
+  setStorageMode: (storageMode: StorageMode) => void;
+}
+
+export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
       storageMode: STORAGE_MODES.REMOTE,

@@ -31,20 +31,20 @@ export function toNullableNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function parseDateInput(value, timeZone) {
+export function parseDateInput(value, timeZone = undefined) {
   const parsed = parseAppDate(value, timeZone);
   return parsed ? parsed.toDate() : null;
 }
 
-export function toDateInputValue(value, timeZone) {
+export function toDateInputValue(value, timeZone = undefined) {
   return toInputDateTimeValue(value, timeZone).slice(0, 10);
 }
 
-export function toDateTimeValue(value, timeZone) {
+export function toDateTimeValue(value, timeZone = undefined) {
   return toInputDateTimeValue(value, timeZone);
 }
 
-export function diffDays(startDate, endDate, timeZone) {
+export function diffDays(startDate, endDate, timeZone = undefined) {
   return diffAppCalendarDays(startDate, endDate, timeZone);
 }
 
@@ -53,7 +53,7 @@ export function roundNumber(value, digits = 2) {
   return Math.round((value + Number.EPSILON) * factor) / factor;
 }
 
-export function calculateHoldingDays(record, referenceDate = new Date(), timeZone) {
+export function calculateHoldingDays(record, referenceDate = new Date(), timeZone = undefined) {
   const startDate = parseDateInput(record.startTime, timeZone);
   const endDate =
     parseDateInput(record.endTime, timeZone) ??
@@ -66,7 +66,7 @@ export function calculateHoldingDays(record, referenceDate = new Date(), timeZon
   return Math.max(1, diffDays(startDate, endDate, timeZone) || 1);
 }
 
-function calculatePlannedDays(record, timeZone) {
+function calculatePlannedDays(record, timeZone = undefined) {
   const startDate = parseDateInput(record.startTime, timeZone);
   const endDate = parseDateInput(record.endTime, timeZone);
 
@@ -77,7 +77,7 @@ function calculatePlannedDays(record, timeZone) {
   return Math.max(1, diffDays(startDate, endDate, timeZone) || 1);
 }
 
-export function calculateInvestmentMetrics(record, referenceDate = new Date(), timeZone) {
+export function calculateInvestmentMetrics(record, referenceDate = new Date(), timeZone = undefined) {
   const amount = toNullableNumber(record.amount) ?? 0;
   const expectedApr = toNullableNumber(record.aprExpected) ?? 0;
   const actualAprInput = toNullableNumber(record.aprActual);

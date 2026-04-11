@@ -10,6 +10,18 @@ import { STORAGE_MODES } from "@/lib/storage-mode";
 const { RangePicker } = DatePicker;
 const { Paragraph } = Typography;
 
+type HistoryRecord = {
+  project: string;
+  assetName: string;
+  startTime: string;
+  endTime?: string;
+  currency: string;
+  metrics: {
+    totalIncome: number;
+    actualApr: number;
+  };
+};
+
 function formatCurrency(value, currency = "USD") {
   try {
     return new Intl.NumberFormat("zh-CN", {
@@ -81,7 +93,7 @@ export default function AnalysisWorkspace({ initialSnapshot }) {
             </Card>
           </Space>
           <Card title="历史收益列表">
-            <List
+            <List<HistoryRecord>
               dataSource={historyRecords}
               renderItem={(record) => (
                 <List.Item>

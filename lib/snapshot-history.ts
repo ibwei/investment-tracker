@@ -19,7 +19,7 @@ function normalizeUserId(userId) {
   return normalized;
 }
 
-function toSnapshotDate(value = new Date(), timeZone) {
+function toSnapshotDate(value = new Date(), timeZone = undefined) {
   return toAppDateKey(value, timeZone);
 }
 
@@ -134,7 +134,11 @@ function buildPortfolioSnapshotPayload(records, capturedAt, timeZone) {
   };
 }
 
-export async function captureUserSnapshots(userId, capturedAt = new Date(), timeZoneInput) {
+export async function captureUserSnapshots(
+  userId,
+  capturedAt = new Date(),
+  timeZoneInput = undefined
+) {
   const normalizedUserId = normalizeUserId(userId);
   const timeZone = timeZoneInput ?? await getUserTimeZone(normalizedUserId);
   const rows = await fetchInvestments(normalizedUserId);
@@ -257,7 +261,10 @@ export async function captureSnapshotsForRemoteUsers(capturedAt = new Date()) {
   };
 }
 
-export async function listPortfolioSnapshots(userId, options = {}) {
+export async function listPortfolioSnapshots(
+  userId,
+  options: { days?: string | number; startDate?: string } = {}
+) {
   const normalizedUserId = normalizeUserId(userId);
   const days = toPositiveInteger(options.days, DEFAULT_SNAPSHOT_DAYS);
   const startDate =

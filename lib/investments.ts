@@ -35,7 +35,7 @@ function normalizeUrl(value) {
   }
 }
 
-function normalizeDate(value, { required = false, timeZone } = {}) {
+function normalizeDate(value, { required = false, timeZone = undefined } = {}) {
   const normalized = toUtcISOString(value, timeZone);
 
   if (required) {

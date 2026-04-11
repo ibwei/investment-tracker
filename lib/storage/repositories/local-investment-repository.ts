@@ -1,4 +1,7 @@
-import { localDatabase } from "@/lib/storage/dexie/client";
+import {
+  localDatabase,
+  type LocalInvestmentRecord
+} from "@/lib/storage/dexie/client";
 import { getLocalUserScope } from "@/lib/storage/local-user-scope";
 import { buildDashboardSnapshot } from "@/lib/snapshot";
 
@@ -7,7 +10,10 @@ function normalizeId(id) {
   return Number.isFinite(parsed) ? parsed : id;
 }
 
-function ensureTimestamps(payload, current = {}) {
+function ensureTimestamps(
+  payload: LocalInvestmentRecord,
+  current: LocalInvestmentRecord = {}
+) {
   const now = new Date().toISOString();
   const userScope = current.userScope ?? getLocalUserScope();
 
