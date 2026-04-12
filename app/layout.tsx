@@ -3,7 +3,6 @@ import "@/app/globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { I18nProvider } from "@/lib/i18n";
 import { getSession } from "@/lib/auth";
-import { getUserById } from "@/lib/users";
 import { Toaster } from "@/components/ui/sonner";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
@@ -88,7 +87,11 @@ export const viewport = {
 
 export default async function RootLayout({ children }) {
   const session = await getSession();
-  const user = session ? await getUserById(session.userId) : null;
+  const user = session
+    ? await import("@/lib/users").then(({ getUserById }) =>
+        getUserById(session.userId)
+      )
+    : null;
 
   return (
     <html lang="en" className="dark" suppressHydrationWarning>

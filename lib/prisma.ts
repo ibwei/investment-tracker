@@ -1,23 +1,38 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const globalForPrisma = globalThis;
+const globalForPrisma = globalThis as typeof globalThis & {
+  __cefidefiPrisma?: PrismaClient;
+};
 
-function createPrismaClient() {
+function getConnectionString() {
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
-    return new PrismaClient();
+    throw new Error("DATABASE_URL is required before accessing the database.");
   }
 
-  const adapter = new PrismaPg({ connectionString });
+  return connectionString;
+}
+
+function createPrismaClient() {
+  const adapter = new PrismaPg({ connectionString: getConnectionString() });
   return new PrismaClient({ adapter });
 }
 
-export const prisma =
-  globalForPrisma.__cefidefiPrisma ??
-  createPrismaClient();
+function getPrismaClient() {
+  if (!globalForPrisma.__cefidefiPrisma) {
+    globalForPrisma.__cefidefiPrisma = createPrismaClient();
+  }
 
-if (!globalForPrisma.__cefidefiPrisma) {
-  globalForPrisma.__cefidefiPrisma = prisma;
+  return globalForPrisma.__cefidefiPrisma;
 }
+
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    const client = getPrismaClient();
+    const value = Reflect.get(client, property);
+
+    return typeof value === "function" ? value.bind(client) : value;
+  }
+});

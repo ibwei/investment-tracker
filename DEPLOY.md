@@ -34,8 +34,12 @@ For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill i
 3. Run `npm run db:migrate` or `npm run db:push` against the intended database before the first cron run.
 4. Add Cloudflare secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, `RESEND_API_KEY`, and OAuth secrets if used.
 5. Configure non-secret Cloudflare variables such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, and `RESEND_FROM_EMAIL`.
-6. Deploy with `npm run deploy`.
-7. Visit `/analytics` and use "Capture Today" once if you want an immediate first snapshot instead of waiting for the scheduled run.
+6. In the Cloudflare Git build settings, set:
+   - Build command: `npm run build`
+   - Deploy command: `npx wrangler deploy`
+   - Version upload command: `npx wrangler versions upload`
+7. Deploy with `npm run deploy` for local CLI deploys, or trigger a Git build from Cloudflare.
+8. Visit `/analytics` and use "Capture Today" once if you want an immediate first snapshot instead of waiting for the scheduled run.
 
 ## Useful Commands
 
@@ -53,6 +57,8 @@ npm run db:migrate
 
 - `npm run next:build` runs a plain Next.js production build.
 - `npm run build` runs the OpenNext for Cloudflare build and writes `.open-next/worker.js` plus `.open-next/assets`.
+- Use npm as the only package manager for this repository. Do not add `yarn.lock` or `pnpm-lock.yaml`.
+- `npx wrangler deploy` is the deploy command after `npm run build` has produced `.open-next`; it is not a replacement for the build command.
 - The Next.js production build uses webpack explicitly to avoid Turbopack process/port issues in restricted CI environments.
 - Cron schedules on Cloudflare are interpreted in `UTC`.
 - The project uses `compatibility_flags: ["nodejs_compat"]` because auth and Prisma rely on Node-compatible APIs.
