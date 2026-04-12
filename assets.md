@@ -1,399 +1,933 @@
-# Assets 模块 PRD（assets.md）
+# Assets 模块 PRD 与技术方案
 
-## 1. 模块定位
+## 1. 文档目的
 
-Assets 模块用于**自动聚合用户在多个数据源（CEX / On-chain）的资产情况**，并以只读方式展示用户的总资产、仓位分布及变化趋势。
+本文档基于当前 Earn Compass 代码、[prd.md](/Users/baiwei/Desktop/berry/earn/cefidefi/prd.md:1)、[tech.md](/Users/baiwei/Desktop/berry/earn/cefidefi/tech.md:1) 和 [README.md](/Users/baiwei/Desktop/berry/earn/cefidefi/README.md:1)，定义未来 Assets 模块的产品范围、数据模型、API、同步任务和安全边界。
 
-该模块是对现有“手动记录 Investment”的补充，侧重：
+Assets 模块尚未在当前主产品路径中实现。本文档用于指导后续开发，避免沿用旧方案中与当前架构不一致的假设。
 
-* 自动化资产读取（无需手动录入）
-* 全资产视角（非收益视角）
-* 多平台统一展示
+## 2. 模块定位
 
-⚠️ 不涉及交易、授权签名或资金操作，仅为**数据读取与展示模块**
+Assets 模块用于自动聚合用户在多个资产来源中的资产余额和仓位，并以只读方式展示总资产、资产分布、来源状态和历史变化趋势。
 
----
+它是现有 Investment 模块的补充：
 
-## 2. 产品目标
+- Investment：用户手动记录收益型投资，用于 APR、收益、到期和投资快照管理
+- Assets：系统自动读取资产来源，用于总资产、币种分布、平台分布和资产历史趋势
 
-### 2.1 核心目标
+Assets 不替代 Investment。初期两套数据独立维护，后续可在 Dashboard 或 Analytics 中做组合视角融合。
 
-* 聚合用户多平台资产形成“总资产视图”
-* 提供资产分布与变化趋势
-* 降低用户手动维护资产成本
+## 3. 当前系统约束
 
-### 2.2 非目标
+新增 Assets 模块必须符合当前项目基线：
 
-* 不支持交易执行
-* 不支持资产划转
-* 不做实时高频更新（采用周期性同步）
-* 不替代 Investment 收益分析模块
+- Next.js 16 App Router
+- React 19
+- Tailwind CSS 4 + Radix UI / 本地 UI primitives
+- Zustand 客户端状态
+- Recharts 图表
+- PostgreSQL 正式数据源
+- `pg` + 参数化 SQL repository
+- 自定义 session cookie 鉴权，不使用 NextAuth
+- 用户数据必须通过 `requireSession()` 保护并按 `session.userId` 隔离
+- 部署目标是 Cloudflare Workers + OpenNext for Cloudflare
+- 定时任务使用 Cloudflare Cron 转发到 `app/api/cron/*`
+- Cron API 使用 `CRON_SECRET` 鉴权
+- 未登录用户只能看到预览数据，不允许真实写入
 
----
+## 4. 产品目标
 
-## 3. 核心使用场景
+### 4.1 核心目标
 
-### 3.1 添加资产来源
+- 聚合用户多个 CEX 和链上地址的资产，形成总资产视图
+- 展示资产按币种、平台、来源类型的分布
+- 展示总资产和主要资产的历史变化趋势
+- 降低用户手动维护资产余额的成本
+- 为未来“总资产 vs 投资本金 vs 收益仓位”融合分析打基础
 
-用户可以添加两类资产来源：
+### 4.2 非目标
 
-#### 1）CEX（中心化交易所）
+- 不提供交易执行
+- 不提供资产划转
+- 不托管资金
+- 不要求钱包签名
+- 不做高频实时行情或高频资产刷新
+- 不替代现有 Investment 的 APR、收益和到期管理
+- MVP 不做 NFT、税务报表或复杂成本价追踪
 
-用户输入：
+## 5. 用户角色与权限
 
-* 交易所（预置）
-* API Key
-* API Secret
-* （可选）Passphrase
+### 5.1 游客
 
-系统通过交易所 API 读取：
+游客可访问 `/assets` 的预览态页面，查看 mock 资产来源、mock 总资产和 mock 分布图。
 
-* 账户总余额
-* 各币种资产
-* 理财/earn 产品仓位（如支持）
+游客限制：
 
-支持交易所（首批）：
+- 不能添加资产来源
+- 不能保存 API Key
+- 不能触发真实同步
+- 不能删除真实资产来源
 
-* OKX
-* Binance
-* Bybit
-* Bitget
-* Gate
-* HTX
-* KuCoin
+### 5.2 已登录用户
 
----
+已登录用户可：
 
-#### 2）On-chain（链上地址）
+- 添加自己的资产来源
+- 查看自己的资产余额和资产快照
+- 手动触发自己的资产同步
+- 删除自己的资产来源
+- 查看同步失败原因摘要
 
-用户输入：
+服务端必须保证：
 
-* 链类型：
+- 所有 Assets API 都按 `session.userId` 过滤
+- 用户不能读取、同步或删除他人的资产来源
+- Cron 只能处理数据库中真实用户的资产来源，不能处理游客预览数据
 
-  * EVM
-  * Solana
-  * Sui
-  * All（自动识别）
-* 钱包地址
+## 6. 核心使用场景
 
-系统通过第三方服务（如 DeBank / Covalent / Zapper）读取：
+### 6.1 添加 CEX 资产来源
 
-* Token 余额
-* DeFi 仓位（LP / Lending / Staking）
+用户选择交易所并填写只读 API 凭据。
 
----
+第一期必须覆盖以下交易所的基础余额读取：
 
-### 3.2 查看资产总览
+- Binance
+- OKX
+- Bybit
+- Bitget
+- Gate
+- HTX
+- KuCoin
 
-用户在 `/assets` 页面可查看：
+第一期覆盖范围：
 
-* 总资产（统一计价）
-* 各资产来源合计
-* 资产分布
-* 历史变化趋势
+- 现货 / 主账户 / funding 余额，按交易所实际账户体系实现
+- 只读 API Key 连接校验
+- 余额标准化为 `NormalizedAssetBalance`
+- 同步状态、失败原因和同步时间记录
+- 手动同步和 Cron 同步
 
----
+第一期不强制覆盖：
 
-### 3.3 自动同步资产
+- 下单、划转、提现
+- Earn / 理财 / staking 的完整产品明细
+- 合约持仓、保证金风险指标、复杂衍生品 Greeks
 
-系统每 4 小时执行一次：
+Earn / 理财产品如果交易所有稳定只读接口，可以作为同一 adapter 的增强项，但不能阻塞基础余额上线。
 
-* 拉取所有资产源最新数据
-* 更新用户资产 snapshot
-* 写入历史记录
+输入字段：
 
----
+- 交易所
+- API Key
+- API Secret
+- Passphrase，按交易所需要可选
+- 来源名称，默认可用交易所名
 
-## 4. 信息架构
+系统行为：
 
-新增页面：
+1. 校验用户已登录
+2. 校验字段完整性
+3. 加密保存敏感凭据
+4. 调用对应 exchange adapter 测试连接
+5. 首次同步余额和仓位
+6. 写入资产余额和资产快照
+7. 返回最新 Assets dashboard snapshot
 
-### 4.1 Assets `/assets`
+### 6.2 添加 On-chain 资产来源
 
-放置在 Dashboard 之后
+用户添加钱包地址，系统读取整个地址的净资产，而不是只读取钱包内 token。目标体验应接近 OKX Wallet / DeBank 的 portfolio 视图：同时覆盖 wallet token、DeFi 存款、LP、staking、rewards、借贷负债和协议级仓位。
 
-页面结构：
+首批建议支持：
 
-1. 总资产卡片
-2. 资产趋势图（总资产变化）
-3. 资产分布图（按币种 / 按平台）
-4. 资产来源列表
-5. 仓位明细列表
-6. 「新增资产源」按钮
+- EVM 地址
+- Solana 地址
+- Sui 地址
 
----
+输入字段：
 
-## 5. UI 设计
+- 链类型：`EVM`、`SOLANA`、`SUI`、`AUTO`
+- 钱包地址
+- 来源名称，可选
 
-### 5.1 风格
+系统行为：
 
-* 延续 Dashboard（Tailwind + Radix UI） 
-* 图表使用 Recharts（与 Analytics 保持一致） 
+1. 校验地址格式
+2. 保存公开地址和链类型
+3. 调用 on-chain portfolio adapter 拉取 total value、token balances 和 DeFi positions
+4. 标准化资产余额、协议仓位和负债
+5. 写入资产快照
 
----
+第一期链上覆盖范围：
 
-### 5.2 核心组件
+- 地址总净值，包含 token + DeFi
+- 各链净值拆分
+- 钱包 token 明细
+- DeFi 协议仓位，至少包含协议名、链、仓位类型、总资产、负债、净值
+- lending/borrow 场景需要用净值口径：`netValueUsd = supplied + rewards - borrowed`
 
-#### 1）总资产卡片
+第一期链上不只做 token balance。只有 token balance 的 provider 可作为 fallback，但不能作为主口径。
 
-* 总资产（USD / 用户选择币种）
-* 24h 变化（可选）
-* 数据更新时间
+### 6.3 查看资产总览
 
----
+用户在 `/assets` 页面查看：
 
-#### 2）资产趋势图
+- 总资产，按用户显示币种展示
+- 24h 或最近一次快照变化
+- 最近同步时间
+- 按币种分布
+- 按来源分布
+- 按类别分布：Spot、Earn、DeFi、Cash、Other
+- 资产来源列表
+- 资产明细列表
 
-* 折线图
-* 数据来源：资产 snapshot
+### 6.4 手动同步
 
----
+用户可在 `/assets` 手动同步：
 
-#### 3）资产分布图
+- 单个资产来源
+- 全部资产来源
 
-* 饼图 / 堆叠图
-* 维度：
+手动同步需要：
 
-  * 币种
-  * 平台（CEX / On-chain）
+- 防重复提交
+- 展示同步中状态
+- 成功后刷新资产总览
+- 失败时更新来源状态并展示简短错误
 
----
+### 6.5 定时同步
 
-#### 4）资产来源列表
+系统通过 Cloudflare Cron 周期性同步资产：
+
+- 建议 MVP 每 4 小时一次
+- 只处理已登录用户保存的资产来源
+- 失败不应中断整个批次
+- 每个 source 单独记录同步状态
+- 整体任务写入 `scheduled_job_logs`
+
+## 7. 信息架构
+
+### 7.1 新增页面
+
+新增主页面：
+
+- `/assets`
+
+导航位置：
+
+- 放在 Dashboard 之后，Analytics 之前
+
+建议页面结构：
+
+1. 预览/登录提示条
+2. 总资产摘要
+3. 资产趋势图
+4. 资产分布图
+5. 资产来源列表
+6. 资产明细列表
+7. 新增资产来源弹窗
+
+### 7.2 与现有页面关系
+
+- Dashboard 初期不直接依赖 Assets
+- Analytics 初期不直接混合 Assets 数据
+- Settings 可后续增加 Assets 同步偏好和 API Key 管理入口
+- 未来可在 Dashboard 增加“总资产 / 活跃投资本金 / 现金余额”对比
+
+## 8. UI 设计
+
+### 8.1 设计原则
+
+- 延续当前主 UI 体系：Tailwind CSS 4 + 本地 UI primitives + Radix UI
+- 图表使用 Recharts，与 Analytics 保持一致
+- 未登录状态展示 mock 数据和只读提示
+- 所有真实写操作在未登录时禁用或跳转登录
+- API Key / Secret 输入不回显明文
+- 同步失败显示可理解的错误摘要，不暴露敏感请求细节
+
+### 8.2 核心组件
+
+建议新增目录：
+
+```text
+components/assets/
+```
+
+组件建议：
+
+- `asset-summary-cards.tsx`
+- `asset-trend-chart.tsx`
+- `asset-allocation-chart.tsx`
+- `asset-source-list.tsx`
+- `asset-balance-table.tsx`
+- `asset-source-form.tsx`
+- `asset-sync-status.tsx`
+
+### 8.3 总资产摘要
+
+展示字段：
+
+- 总资产
+- 24h 变化金额
+- 24h 变化百分比
+- 来源数量
+- 最近同步时间
+
+计价规则：
+
+- 数据库存储 `value_usd`
+- UI 使用现有显示币种偏好和 `/api/exchange-rate` 做展示换算
+
+### 8.4 资产趋势图
+
+图表：
+
+- 折线图或面积图
+
+数据来源：
+
+- `asset_snapshots`
+
+默认范围：
+
+- 30 天
+
+可扩展范围：
+
+- 7 天
+- 30 天
+- 90 天
+- 全部
+
+### 8.5 资产分布图
+
+维度：
+
+- 按币种
+- 按来源
+- 按来源类型：CEX / ONCHAIN
+- 按资产类别：Spot / Earn / DeFi / Other
+
+### 8.6 资产来源列表
 
 字段：
 
-* 名称（Binance / 钱包地址）
-* 类型（CEX / On-chain）
-* 状态（正常 / 失败）
-* 上次同步时间
-* 操作（刷新 / 删除）
+- 名称
+- 类型
+- Provider
+- 状态
+- 上次同步时间
+- 失败原因摘要
+- 操作：同步、编辑名称、删除
 
----
-
-#### 5）仓位明细
+### 8.7 资产明细列表
 
 字段：
 
-* 资产名称
-* 数量
-* 价值（USD）
-* 来源（交易所 / 链）
-* 类型（Spot / Earn / DeFi）
+- 资产符号
+- 资产名称
+- 数量
+- USD 估值
+- 显示币种估值
+- 来源
+- 类别
+- 更新时间
 
----
+## 9. 数据模型
 
-## 6. 关键业务对象
+新增 schema 应添加到 [db/schema.sql](/Users/baiwei/Desktop/berry/earn/cefidefi/db/schema.sql:1)。所有用户数据表必须包含 `user_id`，并建立用户维度索引。
 
-### 6.1 AssetSource
+### 9.1 asset_sources
 
-资产来源
+资产来源配置。
 
-```
-- id
-- userId
-- type: CEX | ONCHAIN
-- name
-- config (加密存储)
-- status
-- lastSyncedAt
-- createdAt
-```
-
----
-
-### 6.2 AssetBalance
-
-资产余额
-
-```
-- id
-- userId
-- sourceId
-- assetSymbol
-- amount
-- valueUsd
-- category (spot / earn / defi)
-- updatedAt
+```sql
+create table if not exists asset_sources (
+  id integer generated by default as identity primary key,
+  user_id integer not null references users(id) on delete cascade,
+  type text not null,
+  provider text not null,
+  name text not null,
+  public_ref text,
+  encrypted_config text,
+  status text not null default 'PENDING',
+  last_synced_at text,
+  last_error text,
+  created_at text not null,
+  updated_at text not null
+);
 ```
 
----
+建议索引：
 
-### 6.3 AssetSnapshot
-
-资产快照（用于趋势）
-
-```
-- id
-- userId
-- totalValueUsd
-- breakdown (json)
-- createdAt
+```sql
+create index if not exists asset_sources_user_type_idx
+  on asset_sources(user_id, type, provider);
 ```
 
----
+字段说明：
 
-## 7. 业务流程
+- `type`: `CEX` 或 `ONCHAIN`
+- `provider`: `BINANCE`、`OKX`、`BYBIT`、`EVM`、`SOLANA`、`SUI` 等
+- `public_ref`: CEX 可为空；On-chain 可存钱包地址
+- `encrypted_config`: CEX API 凭据加密后的 JSON；On-chain 通常为空
+- `status`: `PENDING`、`ACTIVE`、`FAILED`、`DISABLED`
 
-### 7.1 添加资产源
+### 9.2 asset_balances
 
-1. 用户点击「新增资产源」
-2. 输入 APIKey / 地址
-3. 后端验证连接
-4. 成功后立即拉取一次数据
-5. 写入 AssetBalance + Snapshot
+资产余额当前态，主要表示钱包 token、CEX spot/funding 余额等“币种余额”。
 
----
-
-### 7.2 定时同步（核心）
-
-基于现有 Cron 机制扩展： 
-
-新增任务：
-
-```
-/api/cron/assets/sync
-```
-
-执行逻辑：
-
-1. 遍历所有用户 AssetSource
-2. 调用对应 adapter：
-
-   * cexAdapter
-   * onchainAdapter
-3. 标准化数据
-4. 更新 AssetBalance
-5. 生成 AssetSnapshot
-
-执行频率：
-
-* 每 4 小时一次
-
----
-
-## 8. 技术设计
-
-### 8.1 Adapter 设计
-
-新增目录：
-
-```
-lib/assets/adapters/
+```sql
+create table if not exists asset_balances (
+  id integer generated by default as identity primary key,
+  user_id integer not null references users(id) on delete cascade,
+  source_id integer not null references asset_sources(id) on delete cascade,
+  asset_symbol text not null,
+  asset_name text,
+  amount double precision not null default 0,
+  value_usd double precision not null default 0,
+  category text not null default 'OTHER',
+  raw_data text,
+  updated_at text not null,
+  unique (source_id, asset_symbol, category)
+);
 ```
 
-#### CEX Adapter
+建议索引：
+
+```sql
+create index if not exists asset_balances_user_source_idx
+  on asset_balances(user_id, source_id);
+```
+
+类别建议：
+
+- `SPOT`
+- `EARN`
+- `DEFI`
+- `CASH`
+- `OTHER`
+
+### 9.3 asset_positions
+
+资产仓位当前态，主要表示 DeFi protocol position、LP、staking、lending/borrow 等无法用单一 token balance 准确表达的结构化仓位。
+
+```sql
+create table if not exists asset_positions (
+  id integer generated by default as identity primary key,
+  user_id integer not null references users(id) on delete cascade,
+  source_id integer not null references asset_sources(id) on delete cascade,
+  provider text not null,
+  chain text,
+  protocol_id text,
+  protocol_name text,
+  position_type text not null default 'DEFI',
+  asset_value_usd double precision not null default 0,
+  debt_value_usd double precision not null default 0,
+  reward_value_usd double precision not null default 0,
+  net_value_usd double precision not null default 0,
+  raw_data text,
+  updated_at text not null,
+  unique (source_id, provider, chain, protocol_id, position_type)
+);
+```
+
+建议索引：
+
+```sql
+create index if not exists asset_positions_user_source_idx
+  on asset_positions(user_id, source_id);
+```
+
+仓位类型建议：
+
+- `LP`
+- `LENDING`
+- `BORROWING`
+- `STAKING`
+- `FARMING`
+- `VESTING`
+- `DEFI`
+- `OTHER`
+
+### 9.4 asset_snapshots
+
+用户资产总览快照。
+
+```sql
+create table if not exists asset_snapshots (
+  id integer generated by default as identity primary key,
+  user_id integer not null references users(id) on delete cascade,
+  snapshot_date text not null,
+  total_value_usd double precision not null default 0,
+  breakdown text,
+  created_at text not null,
+  unique (user_id, snapshot_date)
+);
+```
+
+建议索引：
+
+```sql
+create index if not exists asset_snapshots_user_date_idx
+  on asset_snapshots(user_id, snapshot_date);
+```
+
+`breakdown` 可存 JSON 字符串，包含：
+
+- bySymbol
+- bySource
+- bySourceType
+- byCategory
+- byChain
+- byProtocol
+- totalDebtUsd
+- totalNetValueUsd
+
+### 9.5 asset_sync_logs
+
+可选，但建议 MVP 加上，方便排查第三方 API 问题。
+
+```sql
+create table if not exists asset_sync_logs (
+  id integer generated by default as identity primary key,
+  user_id integer references users(id) on delete cascade,
+  source_id integer references asset_sources(id) on delete cascade,
+  status text not null,
+  balance_count integer not null default 0,
+  duration_ms integer,
+  error_message text,
+  started_at text,
+  finished_at text,
+  created_at text not null
+);
+```
+
+## 10. 领域服务与目录结构
+
+建议新增：
+
+```text
+lib/assets/
+  adapters/
+    cex/
+      binance.ts
+      okx.ts
+      bybit.ts
+      bitget.ts
+      gate.ts
+      htx.ts
+      kucoin.ts
+    onchain/
+      evm.ts
+      solana.ts
+      sui.ts
+      okx-wallet.ts
+      debank.ts
+    index.ts
+  encryption.ts
+  normalization.ts
+  sources.ts
+  balances.ts
+  positions.ts
+  snapshots.ts
+  sync.ts
+  types.ts
+```
+
+职责：
+
+- `adapters/*`: 调用外部交易所或链上聚合 API
+- `encryption.ts`: API 凭据加密/解密
+- `normalization.ts`: 标准化不同来源的数据结构
+- `sources.ts`: 资产来源 CRUD
+- `balances.ts`: 当前余额 upsert 和查询
+- `positions.ts`: DeFi 和结构化仓位 upsert 和查询
+- `snapshots.ts`: 总资产快照生成和查询
+- `sync.ts`: 单来源同步、用户同步、Cron 批量同步
+- `types.ts`: 共享类型定义
+
+## 11. Adapter 设计
+
+### 11.1 标准输出
+
+所有 adapter 输出统一结构：
+
+```ts
+type NormalizedAssetBalance = {
+  assetSymbol: string;
+  assetName?: string;
+  amount: number;
+  valueUsd: number;
+  category: "SPOT" | "EARN" | "DEFI" | "CASH" | "OTHER";
+  rawData?: unknown;
+};
+```
+
+DeFi 和结构化仓位使用单独结构：
+
+```ts
+type NormalizedAssetPosition = {
+  provider: string;
+  chain?: string;
+  protocolId?: string;
+  protocolName?: string;
+  positionType: "LP" | "LENDING" | "BORROWING" | "STAKING" | "FARMING" | "VESTING" | "DEFI" | "OTHER";
+  assetValueUsd: number;
+  debtValueUsd: number;
+  rewardValueUsd: number;
+  netValueUsd: number;
+  rawData?: unknown;
+};
+```
+
+用户总资产使用净值口径：
+
+```ts
+totalNetValueUsd =
+  sum(tokenBalances.valueUsd) +
+  sum(positions.netValueUsd);
+```
+
+### 11.2 CEX Adapter
 
 统一接口：
 
-```
-getBalances()
-getPositions()
-```
-
-按交易所实现：
-
-```
-binanceAdapter.ts
-okxAdapter.ts
-...
+```ts
+type CexAdapter = {
+  testConnection(config: CexConfig): Promise<void>;
+  getBalances(config: CexConfig): Promise<NormalizedAssetBalance[]>;
+  getPositions?(config: CexConfig): Promise<NormalizedAssetPosition[]>;
+};
 ```
 
----
+要求：
 
-#### On-chain Adapter
+- 仅支持 read-only API Key
+- 不支持交易权限
+- 对交易所 API rate limit 做错误分类
+- 不把 API Secret 写入日志
 
-通过第三方 API：
+### 11.3 第一期 CEX API Key 文档矩阵
 
-推荐：
+第一期 7 家交易所都必须实现基础余额读取。所有 adapter 都应使用官方 REST API 文档，不依赖非官方封装作为唯一依据。
 
-* DeBank API
-* Covalent
-* Zapper
+| 交易所 | 官方文档 | 第一余额接口 | API Key / 签名要点 | 频率限制口径 |
+| --- | --- | --- | --- | --- |
+| Binance | [Spot Account endpoints](https://developers.binance.com/docs/binance-spot-api-docs/rest-api/account-endpoints)、[Request security](https://developers.binance.com/docs/binance-spot-api-docs/rest-api/request-security)、[Limits](https://developers.binance.com/docs/binance-spot-api-docs/rest-api/limits) | `GET /api/v3/account` | `USER_DATA` signed endpoint；query 带 `timestamp`、可选 `recvWindow`；用 API Secret 做 HMAC-SHA256 签名；API Key 放 `X-MBX-APIKEY` | Binance 使用 request weight / interval 体系；实现侧按 endpoint weight 节流，并读取响应 header 做保护 |
+| OKX | [API v5 docs](https://www.okx.com/docs-v5/en/) | `GET /api/v5/account/balance` | header 包含 `OK-ACCESS-KEY`、`OK-ACCESS-SIGN`、`OK-ACCESS-TIMESTAMP`、`OK-ACCESS-PASSPHRASE`；签名字符串按官方 timestamp + method + path + body | OKX 私有 REST 频率通常按 User ID 和 endpoint 计；实现侧按每 source 串行同步 |
+| Bybit | [V5 Wallet Balance](https://bybit-exchange.github.io/docs/v5/account/wallet-balance)、[V5 Integration Guidance](https://bybit-exchange.github.io/docs/v5/guide) | `GET /v5/account/wallet-balance` | header 包含 `X-BAPI-API-KEY`、`X-BAPI-TIMESTAMP`、`X-BAPI-RECV-WINDOW`、`X-BAPI-SIGN`；需要 `accountType` | Bybit V5 有 endpoint/API key 维度 rate limit；实现侧按 accountType 分批且低频调用 |
+| Bitget | [Quick Start](https://www.bitget.com/api-doc/common/quick-start)、[Get Account Assets](https://www.bitget.com/api-doc/spot/account/Get-Account-Assets) | `GET /api/v2/spot/account/assets` | header 包含 `ACCESS-KEY`、`ACCESS-SIGN`、`ACCESS-PASSPHRASE`、`ACCESS-TIMESTAMP`；签名按官方 pre-hash 字符串 | Bitget REST 超限返回 429；文档说明总限制和 endpoint 独立限制，adapter 必须按 endpoint 标注节流 |
+| Gate | [API v4 docs](https://www.gate.com/docs/developers/apiv4/) | `GET /spot/accounts` | header 通常包含 `KEY`、`Timestamp`、`SIGN`；签名使用 HMAC-SHA512；需要 Spot read 权限 | Gate 按 API v4 endpoint/账户限制；实现侧串行读取并保留 429 重试退避 |
+| HTX | [Spot API v1 docs](https://huobiapi.github.io/docs/spot/v1/en/) | `GET /v1/account/accounts` 后查询账户余额 | 使用 `AccessKeyId`、`SignatureMethod`、`SignatureVersion`、`Timestamp`、`Signature`；HMAC-SHA256 + Base64 | HTX 私有接口有 UID/API key 限制；实现侧不要并发扫多个账户 |
+| KuCoin | [Get Account List](https://www.kucoin.com/docs-new/rest/account-info/account-funding/get-account-list-spot)、[Authentication](https://www.kucoin.com/docs-new/authentication) | `GET /api/v1/accounts` | header 包含 `KC-API-KEY`、`KC-API-SIGN`、`KC-API-TIMESTAMP`、`KC-API-PASSPHRASE`、`KC-API-KEY-VERSION` | KuCoin 按 endpoint resource pool / weight 限制；实现侧按官方 header 和 429 做退避 |
 
-统一输出：
+第一期实现要求：
 
+- 每个 exchange adapter 独立实现 signer，不共享有歧义的签名逻辑
+- API Key 表单按交易所动态展示 `passphrase` 是否必填
+- 每个 adapter 必须实现 `testConnection`
+- 每个 adapter 必须把外部错误归类为 `AUTH_FAILED`、`RATE_LIMITED`、`PROVIDER_DOWN`、`BAD_CONFIG`、`UNKNOWN`
+- 每个 adapter 的文档链接和接口路径要写在代码注释或 adapter metadata 中，方便后续维护
+
+### 11.4 CEX 同步频率策略
+
+交易所都有频率限制，但 Assets 的产品需求不是实时交易系统。第一期建议：
+
+- 默认 Cron 每 4 小时同步一次
+- 单用户手动“同步全部”最短间隔 5 分钟
+- 单个 source 手动同步最短间隔 60 秒
+- Cron 批处理按 source 串行或小并发执行，默认并发 `2`
+- 同一交易所同一用户 source 不并发
+- 收到 429 后指数退避，并把 source 标记为 `FAILED` 或 `RATE_LIMITED`
+- 每个 provider adapter 内部维护 endpoint throttle 配置，不在 UI 层处理 rate limit
+
+这个频率远低于各交易所私有 REST API 常见上限，主要风险来自用户量增长后的 Cron 批量同步。用户量增加后需要把 Cron 拆成分页批次或队列任务。
+
+### 11.5 On-chain Portfolio Adapter
+
+统一接口：
+
+```ts
+type OnchainAdapter = {
+  validateAddress(address: string): boolean;
+  getPortfolio(address: string): Promise<{
+    balances: NormalizedAssetBalance[];
+    positions: NormalizedAssetPosition[];
+    totalNetValueUsd: number;
+    rawData?: unknown;
+  }>;
+};
 ```
-tokens
-defiPositions
-totalValue
+
+第一期链上 provider 选择原则：
+
+- 优先能返回整个地址 portfolio，而不是只返回 token
+- 优先覆盖 DeFi protocol position、lending debt、LP、staking 和 rewards
+- 免费或低成本优先，但不能牺牲“整个地址的钱”这个核心口径
+- EVM 覆盖优先，其次 Solana 和 Sui
+
+推荐组合：
+
+| Provider | 用途 | 优点 | 限制 | 建议 |
+| --- | --- | --- | --- | --- |
+| OKX Wallet / OKX Web3 Onchain OS | 多链 DeFi holdings 和 portfolio | 接近用户认知中的钱包资产视图，支持 DeFi holdings 查询 | 需要确认 API key、配额和覆盖链；不同接口可能有独立限制 | 第一优先调研和接入：[User Holdings](https://web3.okx.com/onchainos/dev-docs/wallet/defi-user-asset-overview) |
+| DeBank OpenAPI | EVM 地址 total balance、chain balance、token list、protocol positions | DeFi 覆盖广，口径接近 DeBank 产品；`total_balance` 是 tokens + protocols 的净资产口径 | Pro OpenAPI 需要 access key，可购买 units；非 EVM 覆盖有限 | EVM DeFi 主 provider 或 fallback：[User API](https://docs.cloud.debank.com/en/readme/api-pro-reference/user)、[OpenAPI rate limit](https://docs.cloud.debank.com/en/readme/open-api) |
+| Alchemy Portfolio API | 多链 token balances，覆盖 EVM/Solana 等基础余额 | 免费层友好，token 和价格能力稳定 | DeFi protocol position 覆盖不如 DeBank/OKX | token fallback，不作为 DeFi 主口径：[Portfolio APIs](https://www.alchemy.com/docs/docs/reference/portfolio-apis) |
+| Helius | Solana DAS / enhanced APIs | Solana 生态覆盖好，有免费层 | 免费层 DAS/enhanced API 速率较低 | Solana fallback：[Rate limits](https://www.helius.dev/docs/billing/rate-limits) |
+| BlockPI / 官方 RPC | Sui `suix_getAllBalances` 等基础余额 | 成本低，可查基础 coin balances | 不覆盖完整 DeFi position | Sui fallback |
+| Zapper / Covalent | DeFi 和 portfolio 增强 | 覆盖面较广 | 免费层和限制需按实际账号确认 | 第二阶段备选 |
+
+链上第一期不建议只用纯 RPC，因为纯 RPC 只能解决 token/coin balances，无法稳定表达“钱在 DeFi 里”的真实净值。
+
+## 12. API 设计
+
+所有 route handler 建议设置：
+
+```ts
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 ```
 
----
+### 12.1 Assets Dashboard API
 
-### 8.2 数据流
+- `GET /api/assets`
+  - 返回当前用户资产总览 snapshot
+  - 包含 sources、balances、positions、summary、meta
 
-```
-API → Adapter → Normalize → DB → Snapshot → UI
-```
+### 12.2 Asset Sources API
 
----
+- `GET /api/assets/sources`
+  - 列出当前用户资产来源
+- `POST /api/assets/sources`
+  - 添加资产来源，验证并首次同步
+- `PATCH /api/assets/sources/:id`
+  - 更新来源名称、状态或非敏感配置
+- `DELETE /api/assets/sources/:id`
+  - 删除当前用户资产来源，建议硬删除 source 并级联删除 balances
 
-### 8.3 安全设计
+### 12.3 Asset Sync API
 
-* API Key 必须加密存储（AES）
-* 不存储交易权限（仅允许 read-only）
-* 提示用户仅提供只读 API
+- `POST /api/assets/sync`
+  - 同步当前用户全部资产来源
+- `POST /api/assets/sources/:id/sync`
+  - 同步当前用户指定资产来源
 
----
+### 12.4 Asset Snapshots API
 
-## 9. API 设计
+- `GET /api/assets/snapshots`
+  - 查询当前用户资产快照
+  - 支持 `days` 或 `startDate`
+- `POST /api/assets/snapshots`
+  - 手动捕获当前用户资产快照
 
-### 9.1 Assets API
+### 12.5 Cron API
 
-```
-GET /api/assets
-GET /api/assets/snapshot
-POST /api/assets/source
-DELETE /api/assets/source/:id
-POST /api/assets/sync
-```
+- `GET /api/cron/assets/sync`
+  - 批量同步所有启用的资产来源
+  - 使用 `CRON_SECRET` 鉴权
+  - 写入 `scheduled_job_logs`
 
----
+## 13. 同步流程
 
-## 10. 与现有系统关系
+### 13.1 添加资产来源并首次同步
 
-| 模块         | 作用     |
-| ---------- | ------ |
-| Investment | 手动收益记录 |
-| Assets     | 自动资产聚合 |
+1. 用户提交资产来源
+2. API 调用 `requireSession()`
+3. 校验 provider 和配置
+4. CEX 配置加密保存；On-chain 地址明文保存到 `public_ref`
+5. 调用 adapter 测试连接
+6. 拉取 balances
+7. 标准化为 `NormalizedAssetBalance[]` 和 `NormalizedAssetPosition[]`
+8. upsert `asset_balances`
+9. upsert `asset_positions`
+10. upsert 今日 `asset_snapshots`
+11. 返回最新 `/api/assets` snapshot
 
-两者关系：
+### 13.2 单来源同步
 
-* 数据完全独立
-* Dashboard 不直接依赖 Assets（初期）
-* 后续可做融合（总资产 vs 投资本金）
+1. 校验 session
+2. 按 `source_id + user_id` 读取来源
+3. 解密配置或读取地址
+4. 调用 adapter
+5. 用本次结果覆盖该来源当前余额和仓位
+6. 更新 source 状态、`last_synced_at`、`last_error`
+7. 写入 sync log
+8. 捕获用户资产快照
 
----
+### 13.3 Cron 批量同步
 
-## 11. 非功能需求
+1. 校验 `CRON_SECRET`
+2. 查询 `status in ('ACTIVE', 'FAILED')` 的资产来源
+3. 按 source 顺序逐个同步
+4. 单个 source 失败时记录失败并继续
+5. 每个受影响用户同步结束后捕获资产快照
+6. 写入 `scheduled_job_logs`
 
-* 支持多币种显示（复用现有汇率 API） 
-* 同步失败需有容错（标记 source 状态）
-* 单用户资产源数量限制（如 ≤ 10）
+## 14. Cron 配置
 
----
+当前 `wrangler.jsonc` 已有：
 
-## 12. 风险与注意事项
+- `0 12 * * *` -> `/api/cron/snapshots`
+- `0 2 * * *` -> `/api/cron/investments/expiry-reminders`
 
-### 12.1 API 限制
+新增 Assets 同步建议：
 
-* CEX API rate limit
-* 第三方 API 可能收费 / 限流
+- `0 */4 * * *` -> `/api/cron/assets/sync`
 
-### 12.2 数据不一致
+需要同步修改：
 
-* 不同平台估值口径不同
-* DeFi 仓位解析复杂
+- [wrangler.jsonc](/Users/baiwei/Desktop/berry/earn/cefidefi/wrangler.jsonc:1) 的 `triggers.crons`
+- [custom-worker.js](/Users/baiwei/Desktop/berry/earn/cefidefi/custom-worker.js:1) 的 cron path 映射
+- [tech.md](/Users/baiwei/Desktop/berry/earn/cefidefi/tech.md:1) 和 [README.md](/Users/baiwei/Desktop/berry/earn/cefidefi/README.md:1) 的 Cron 文档
 
----
+Cloudflare Cron 使用 UTC。`0 */4 * * *` 表示每天 00:00、04:00、08:00、12:00、16:00、20:00 UTC 执行。
 
-## 13. 后续扩展方向
+## 15. 安全设计
 
-* 实时刷新（WebSocket）
-* 资产收益分析（与 Investment 融合）
-* 多钱包聚合
-* NFT 资产支持
-* 税务报表
+### 15.1 API Key 存储
 
----
+CEX API Key、Secret、Passphrase 必须加密存储。
+
+建议新增生产环境变量：
+
+- `ASSET_CREDENTIAL_ENCRYPTION_KEY`
+
+要求：
+
+- 使用强随机密钥
+- 不提交到仓库
+- 通过 Cloudflare Secrets 配置
+- 本地开发只用测试 key
+
+实现建议：
+
+- 使用 Node `crypto` 的 AES-256-GCM
+- 每条配置使用独立 IV
+- 存储密文、IV、auth tag 和版本号
+- 日志中永不输出明文凭据
+
+### 15.2 只读权限
+
+产品和 UI 必须明确提示：
+
+- 只使用 read-only API Key
+- 不需要交易权限
+- 不需要提现权限
+- 不需要钱包私钥或助记词
+
+服务端不应实现任何交易、划转或签名 API。
+
+### 15.3 错误与日志
+
+- `last_error` 只保存摘要，不保存完整外部请求或 secret
+- 交易所签名 payload 不进入日志
+- 第三方 API 返回的敏感字段进入 `raw_data` 前需要过滤
+- sync log 可记录 provider、状态、耗时、数量和错误摘要
+
+## 16. 环境变量
+
+新增 Assets 模块后，除现有必需变量外，建议增加：
+
+- `ASSET_CREDENTIAL_ENCRYPTION_KEY`
+
+按实际 provider 增加：
+
+- `OKX_WEB3_API_KEY`
+- `OKX_WEB3_PROJECT_ID`
+- `DEBANK_API_KEY`
+- `ALCHEMY_API_KEY`
+- `HELIUS_API_KEY`
+- `BLOCKPI_API_KEY`
+- `COVALENT_API_KEY`
+- `ZAPPER_API_KEY`
+
+如果第一期要达到 OKX Wallet / DeBank 类似的全地址净值体验，不能只依赖免费公开 RPC。建议先调研 OKX Web3 Onchain OS 和 DeBank OpenAPI 的额度、成本和覆盖链，再决定主 provider；Alchemy、Helius、BlockPI 更适合作为低成本 token/链特定 fallback。
+
+## 17. 与现有系统关系
+
+| 模块 | 作用 | 数据来源 | 是否自动同步 |
+| --- | --- | --- | --- |
+| Investment | 手动收益记录、APR、收益、到期 | 用户手动录入 | 快照和自动结算 |
+| Assets | 自动资产聚合、余额、分布、趋势 | CEX API / 链上地址 | 周期性同步 |
+
+初期关系：
+
+- 两套表独立
+- 两套 API 独立
+- Dashboard 不依赖 Assets
+- Analytics 不混合 Assets
+
+后续融合方向：
+
+- Dashboard 展示总资产和活跃投资本金占比
+- Analytics 增加资产净值曲线
+- Investment 可从 Assets 中关联某个来源或仓位
+
+## 18. 非功能需求
+
+- 页面兼容桌面和移动端
+- 同步任务要可重复执行，不因单个 source 失败中断全局任务
+- 单用户资产来源数量建议 MVP 限制为 10 个
+- 单次手动同步需要节流，避免误触发外部 API rate limit
+- 数据刷新后 UI 需要明确显示最新同步时间
+- 汇率展示复用现有显示币种偏好和 `/api/exchange-rate`
+- 所有数据库写入使用参数化 SQL
+- 所有用户数据 API 必须按 `userId` 过滤
+- 游客模式使用 preview 数据，不执行真实同步
+
+## 19. 风险与注意事项
+
+### 19.1 外部 API 限制
+
+- 交易所 API rate limit 不一致
+- 第三方链上聚合 API 可能收费或限流
+- 不同 provider 的 Earn / DeFi 仓位覆盖率不同
+
+### 19.2 数据口径不一致
+
+- 交易所和链上聚合服务的估值时间点不同
+- 稳定币、低流动性 token、LP token 的估值可能不准确
+- DeFi 仓位可能包含借贷、抵押、奖励、负债，MVP 需要先采用统一简化口径
+
+### 19.3 安全风险
+
+- 用户可能误创建带交易权限的 API Key
+- 错误日志可能泄露外部 API 响应中的敏感信息
+- 加密密钥轮换需要额外设计
+
+### 19.4 Cloudflare Workers 约束
+
+- Worker 执行时间和外部请求数量有限
+- 批量同步需要避免一次 Cron 处理过多 source
+- 大规模用户后需要分页、分片或队列化
+
+## 20. MVP 建议范围
+
+第一阶段必须做：
+
+- `/assets` 页面
+- 预览态 mock 数据
+- 登录用户添加 CEX API Key 来源
+- Binance、OKX、Bybit、Bitget、Gate、HTX、KuCoin 基础余额 adapter
+- 登录用户添加 On-chain 地址来源
+- On-chain portfolio 主 provider，优先 OKX Web3 Onchain OS 或 DeBank OpenAPI
+- token fallback provider，优先 Alchemy；Solana fallback 可用 Helius；Sui fallback 可用 BlockPI 或官方 RPC
+- 资产总览、分布、明细、DeFi 仓位、快照趋势
+- 手动同步
+- 每 4 小时 Cron 同步
+- API Key 加密存储
+- sync logs 后端记录
+
+第二阶段再做：
+
+- sync logs 页面化
+- 资产同步偏好
+- CEX Earn / 理财 / staking 明细增强
+- DeFi position 细分类和负债展示优化
+
+第三阶段再做：
+
+- Investment 和 Assets 融合分析
+- 多钱包批量导入
+- NFT 或税务报表
