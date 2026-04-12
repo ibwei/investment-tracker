@@ -387,7 +387,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 路由：
 
 - `GET /api/cron/snapshots`
-  - 先自动结算到期投资，再为所有 `REMOTE` 用户捕获每日快照
+  - 先自动结算到期投资，再为所有 `REMOTE` 用户捕获收益/组合快照
   - 写入 `scheduled_job_logs`，jobName 为 `portfolio-snapshot-capture`
 - `GET /api/cron/investments/settle`
   - 独立执行到期投资自动结算
@@ -431,7 +431,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 - 构建 HTML 和 text 邮件
 - 通过 [lib/email.ts](/Users/baiwei/Desktop/berry/earn/cefidefi/lib/email.ts:1) 调用 Resend
 
-当前行为是：只要用户存在活跃投资，每日都会收到摘要邮件；未来 24 小时内到期的项目在邮件中优先展示。
+当前行为是：只要用户存在活跃投资，每天 10:00 和 22:00（UTC+8）都会收到摘要邮件；未来 24 小时内到期的项目在邮件中优先展示。
 
 ## 11. Cloudflare Workers 部署
 
@@ -454,8 +454,9 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 - assets directory：`.open-next/assets`
 - `keep_vars: true`
 - Cron：
-  - `0 12 * * *`
+  - `0 */12 * * *`
   - `0 2 * * *`
+  - `0 14 * * *`
 - logs observability 开启，traces 未开启
 
 `keep_vars: true` 表示 Cloudflare Dashboard 中配置的 runtime vars 会在 deploy 时保留。Secrets 仍应通过 Cloudflare Secrets 管理，不应写入仓库。
@@ -464,13 +465,15 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 
 [custom-worker.js](/Users/baiwei/Desktop/berry/earn/cefidefi/custom-worker.js:1) 当前映射：
 
-- `0 12 * * *` -> `/api/cron/snapshots`
+- `0 */12 * * *` -> `/api/cron/snapshots`
 - `0 2 * * *` -> `/api/cron/investments/expiry-reminders`
+- `0 14 * * *` -> `/api/cron/investments/expiry-reminders`
 
 Cloudflare Cron 使用 UTC：
 
-- `12:00 UTC` = `20:00 Asia/Shanghai`
+- `0 */12 * * *` = 每天 `08:00` 和 `20:00 Asia/Shanghai`
 - `02:00 UTC` = `10:00 Asia/Shanghai`
+- `14:00 UTC` = `22:00 Asia/Shanghai`
 
 `/api/cron/investments/settle` 是可手动调用的独立结算 route，当前没有单独配置 Cloudflare Cron，因为 `/api/cron/snapshots` 已经会先执行自动结算。
 

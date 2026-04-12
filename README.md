@@ -16,9 +16,9 @@ Earn Compass 是一个用于管理 CeFi / DeFi 收益型投资仓位的 Next.js 
 - 投资记录管理：新增、编辑、删除、提前结束
 - 收益总览：活跃本金、累计收益、日/周/月/年收益、加权 APR
 - 分析图表：收入概览、真实快照趋势、收益趋势、APR 分布、项目占比、组合波动
-- 快照系统：手动捕获当前用户快照；Cron 为远程用户每日捕获快照
+- 快照系统：手动捕获当前用户快照；Cron 每 12 小时为远程用户捕获快照
 - 到期处理：Cron 自动把已到期 `ONGOING` 投资更新为 `ENDED`
-- 邮件提醒：Cron 每日向有活跃投资的活跃用户发送到期提醒，24 小时内到期项目优先展示
+- 邮件提醒：Cron 每天 10:00 和 22:00（UTC+8）向有活跃投资的活跃用户发送到期提醒，24 小时内到期项目优先展示
 - 设置中心：个人资料、时区、语言、显示币种、通知开关占位、JSON 导出、清空数据
 
 ## 技术栈
@@ -193,10 +193,11 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 
 Cloudflare Cron 当前配置：
 
-- `0 12 * * *`：转发到 `/api/cron/snapshots`
-- `0 2 * * *`：转发到 `/api/cron/investments/expiry-reminders`
+- `0 */12 * * *`：转发到 `/api/cron/snapshots`，每 12 小时采集收益/组合快照
+- `0 2 * * *`：转发到 `/api/cron/investments/expiry-reminders`，对应 UTC+8 每天 10:00
+- `0 14 * * *`：转发到 `/api/cron/investments/expiry-reminders`，对应 UTC+8 每天 22:00
 
-Cron 时间按 UTC 解释。在 `Asia/Shanghai` 时区分别是 20:00 和 10:00。
+Cron 时间按 UTC 解释。`Asia/Shanghai` / UTC+8 下，快照采集为每天 08:00 和 20:00，到期提醒为每天 10:00 和 22:00。
 
 ## 文档
 

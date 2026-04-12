@@ -768,8 +768,9 @@ export const runtime = "nodejs";
 
 当前 `wrangler.jsonc` 已有：
 
-- `0 12 * * *` -> `/api/cron/snapshots`
+- `0 */12 * * *` -> `/api/cron/snapshots`
 - `0 2 * * *` -> `/api/cron/investments/expiry-reminders`
+- `0 14 * * *` -> `/api/cron/investments/expiry-reminders`
 
 新增 Assets 同步建议：
 

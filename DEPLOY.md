@@ -29,14 +29,15 @@ For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill i
 
 ## Scheduled Jobs
 
-- `wrangler.jsonc` schedules `/api/cron/snapshots` at `12:00 UTC` every day. This route also converts matured `ONGOING` investments into `ENDED` before capturing snapshots.
-- `wrangler.jsonc` schedules `/api/cron/investments/expiry-reminders` at `02:00 UTC` every day.
-- `12:00 UTC` equals `20:00` in `Asia/Shanghai`.
+- `wrangler.jsonc` schedules `/api/cron/snapshots` every 12 hours with `0 */12 * * *`. This route also converts matured `ONGOING` investments into `ENDED` before capturing snapshots.
+- `wrangler.jsonc` schedules `/api/cron/investments/expiry-reminders` at `02:00 UTC` and `14:00 UTC` every day.
+- Snapshot capture runs at `08:00` and `20:00` in `Asia/Shanghai`.
 - `02:00 UTC` equals `10:00` in `Asia/Shanghai`.
+- `14:00 UTC` equals `22:00` in `Asia/Shanghai`.
 - Cloudflare calls `custom-worker.js` through the Worker `scheduled()` handler.
 - The scheduled handler forwards requests to the existing cron API routes with `Authorization: Bearer <CRON_SECRET>`.
 - The cron routes also accept `x-cron-secret` so they can be tested manually from tools like `curl` or Postman.
-- The expiry reminder route emails each active user with `ONGOING` investments every day. Investments expiring in the next 24 hours are shown first, followed by the user's other active investments.
+- The expiry reminder route emails each active user with `ONGOING` investments twice per day at `10:00` and `22:00` in `Asia/Shanghai`. Investments expiring in the next 24 hours are shown first, followed by the user's other active investments.
 
 ## First Production Deploy
 

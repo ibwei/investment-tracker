@@ -31,13 +31,19 @@ function isAuthorized(request) {
   return bearerToken === secret || headerToken === secret;
 }
 
+function toHourlyRunKey(value = new Date()) {
+  const date = new Date(value);
+  date.setUTCMinutes(0, 0, 0);
+  return date.toISOString();
+}
+
 export async function GET(request) {
   if (!isAuthorized(request)) {
     return unauthorized();
   }
 
   const startedAt = new Date();
-  const runDate = startedAt.toISOString().slice(0, 10);
+  const runDate = toHourlyRunKey(startedAt);
 
   try {
     const result = await sendExpiringInvestmentReminders(startedAt);
