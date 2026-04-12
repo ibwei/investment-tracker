@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { query } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import { formatInAppTimeZone } from "@/lib/time";
 
@@ -273,37 +273,32 @@ export async function sendExpiringInvestmentReminders(referenceDate = new Date()
   const now = toDate(referenceDate) || new Date();
   const windowEnd = new Date(now.getTime() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000);
 
-  const candidates = await prisma.investment.findMany({
-    where: {
-      isDeleted: false,
-      status: "ONGOING",
-      user: {
-        is: {
-          status: "ACTIVE"
-        }
-      }
-    },
-    select: {
-      id: true,
-      project: true,
-      assetName: true,
-      type: true,
-      amount: true,
-      currency: true,
-      aprExpected: true,
-      endTime: true,
-      remark: true,
-      user: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          timezone: true
-        }
-      }
-    },
-    orderBy: [{ id: "asc" }]
-  });
+  const candidates = await query(
+    `
+      select
+        investments.id,
+        investments.project,
+        investments.asset_name as "assetName",
+        investments.type,
+        investments.amount,
+        investments.currency,
+        investments.apr_expected as "aprExpected",
+        investments.end_time as "endTime",
+        investments.remark,
+        json_build_object(
+          'id', users.id,
+          'email', users.email,
+          'name', users.name,
+          'timezone', users.timezone
+        ) as "user"
+      from investments
+      join users on users.id = investments.user_id
+      where investments.is_deleted = false
+        and investments.status = 'ONGOING'
+        and users.status = 'ACTIVE'
+      order by investments.id asc
+    `
+  );
 
   const groups = groupInvestmentsByUser(candidates);
   const deliveries = [];

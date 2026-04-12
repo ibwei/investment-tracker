@@ -1,10 +1,10 @@
-import { prisma } from "@/lib/prisma";
 import {
   INVESTMENT_STATUSES,
   isBlank,
   parseDateInput,
   toNullableNumber
 } from "@/lib/calculations";
+import { execute, query, queryOne } from "@/lib/db";
 import { buildDashboardSnapshot } from "@/lib/snapshot";
 import { toUtcISOString } from "@/lib/time";
 import { getUserTimeZone } from "@/lib/users";
@@ -136,6 +136,32 @@ function mapRecord(record) {
   };
 }
 
+const INVESTMENT_FIELDS = `
+  id,
+  user_id as "userId",
+  project,
+  asset_name as "assetName",
+  url,
+  type,
+  amount,
+  currency,
+  allocation_note as "allocationNote",
+  start_time as "startTime",
+  end_time as "endTime",
+  apr_expected as "aprExpected",
+  apr_actual as "aprActual",
+  income_total as "incomeTotal",
+  income_daily as "incomeDaily",
+  income_weekly as "incomeWeekly",
+  income_monthly as "incomeMonthly",
+  income_yearly as "incomeYearly",
+  status,
+  remark,
+  is_deleted as "isDeleted",
+  created_at as "createdAt",
+  updated_at as "updatedAt"
+`;
+
 function normalizeUserId(userId) {
   const normalized = Number(userId);
   assert(Number.isInteger(normalized) && normalized > 0, "Unauthorized.", 401);
@@ -143,35 +169,27 @@ function normalizeUserId(userId) {
 }
 
 async function fetchRows(userId) {
-  return prisma.investment.findMany({
-    where: {
-      userId: normalizeUserId(userId),
-      isDeleted: false
-    },
-    orderBy: [
-      {
-        status: "asc"
-      },
-      {
-        endTime: "desc"
-      },
-      {
-        startTime: "desc"
-      },
-      {
-        id: "desc"
-      }
-    ]
-  });
+  return query(
+    `
+      select ${INVESTMENT_FIELDS}
+      from investments
+      where user_id = $1 and is_deleted = false
+      order by status asc, end_time desc nulls last, start_time desc, id desc
+    `,
+    [normalizeUserId(userId)]
+  );
 }
 
 async function fetchRowById(id, userId) {
-  return prisma.investment.findFirst({
-    where: {
-      id,
-      userId: normalizeUserId(userId)
-    }
-  });
+  return queryOne(
+    `
+      select ${INVESTMENT_FIELDS}
+      from investments
+      where id = $1 and user_id = $2
+      limit 1
+    `,
+    [id, normalizeUserId(userId)]
+  );
 }
 
 export async function getDashboardSnapshot(userId) {
@@ -181,21 +199,14 @@ export async function getDashboardSnapshot(userId) {
 }
 
 export async function autoSettleMaturedInvestments(referenceDate = new Date()) {
-  const candidates = await prisma.investment.findMany({
-    where: {
-      isDeleted: false,
-      status: "ONGOING",
-      NOT: {
-        endTime: null
-      }
-    },
-    select: {
-      id: true,
-      endTime: true,
-      status: true
-    },
-    orderBy: [{ id: "asc" }]
-  });
+  const candidates = await query<{ id: number; endTime: string | null; status: string }>(
+    `
+      select id, end_time as "endTime", status
+      from investments
+      where is_deleted = false and status = 'ONGOING' and end_time is not null
+      order by id asc
+    `
+  );
 
   const maturedIds = candidates
     .filter((record) => shouldAutoSettle(record, referenceDate))
@@ -210,21 +221,18 @@ export async function autoSettleMaturedInvestments(referenceDate = new Date()) {
   }
 
   const updatedAt = currentTimestamp();
-  const result = await prisma.investment.updateMany({
-    where: {
-      id: {
-        in: maturedIds
-      }
-    },
-    data: {
-      status: "ENDED",
-      updatedAt
-    }
-  });
+  const result = await execute(
+    `
+      update investments
+      set status = 'ENDED', updated_at = $2
+      where id = any($1::int[])
+    `,
+    [maturedIds, updatedAt]
+  );
 
   return {
     checkedCount: candidates.length,
-    settledCount: result.count,
+    settledCount: result.rowCount ?? 0,
     settledIds: maturedIds
   };
 }
@@ -234,31 +242,43 @@ export async function createInvestment(userId, input) {
   const normalized = normalizeInvestmentInput(input, null, timeZone);
   const now = currentTimestamp();
 
-  const record = await prisma.investment.create({
-    data: {
-      userId: normalizeUserId(userId),
-      project: normalized.project,
-      assetName: normalized.assetName,
-      url: normalized.url,
-      type: normalized.type,
-      amount: normalized.amount,
-      currency: normalized.currency,
-      allocationNote: normalized.allocationNote,
-      startTime: normalized.startTime,
-      endTime: normalized.endTime,
-      aprExpected: normalized.aprExpected,
-      aprActual: normalized.aprActual,
-      incomeTotal: normalized.incomeTotal,
-      incomeDaily: normalized.incomeDaily,
-      incomeWeekly: normalized.incomeWeekly,
-      incomeMonthly: normalized.incomeMonthly,
-      incomeYearly: normalized.incomeYearly,
-      status: normalized.status,
-      remark: normalized.remark,
-      createdAt: now,
-      updatedAt: now
-    }
-  });
+  const record = await queryOne(
+    `
+      insert into investments (
+        user_id, project, asset_name, url, type, amount, currency, allocation_note,
+        start_time, end_time, apr_expected, apr_actual, income_total, income_daily,
+        income_weekly, income_monthly, income_yearly, status, remark, created_at, updated_at
+      )
+      values (
+        $1, $2, $3, $4, $5, $6, $7, $8,
+        $9, $10, $11, $12, $13, $14,
+        $15, $16, $17, $18, $19, $20, $20
+      )
+      returning ${INVESTMENT_FIELDS}
+    `,
+    [
+      normalizeUserId(userId),
+      normalized.project,
+      normalized.assetName,
+      normalized.url,
+      normalized.type,
+      normalized.amount,
+      normalized.currency,
+      normalized.allocationNote,
+      normalized.startTime,
+      normalized.endTime,
+      normalized.aprExpected,
+      normalized.aprActual,
+      normalized.incomeTotal,
+      normalized.incomeDaily,
+      normalized.incomeWeekly,
+      normalized.incomeMonthly,
+      normalized.incomeYearly,
+      normalized.status,
+      normalized.remark,
+      now
+    ]
+  );
 
   return mapRecord(record);
 }
@@ -273,32 +293,56 @@ export async function updateInvestment(userId, id, input) {
   const normalized = normalizeInvestmentInput(input, currentRecord, timeZone);
   const now = currentTimestamp();
 
-  const record = await prisma.investment.update({
-    where: {
-      id
-    },
-    data: {
-      project: normalized.project,
-      assetName: normalized.assetName,
-      url: normalized.url,
-      type: normalized.type,
-      amount: normalized.amount,
-      currency: normalized.currency,
-      allocationNote: normalized.allocationNote,
-      startTime: normalized.startTime,
-      endTime: normalized.endTime,
-      aprExpected: normalized.aprExpected,
-      aprActual: normalized.aprActual,
-      incomeTotal: normalized.incomeTotal,
-      incomeDaily: normalized.incomeDaily,
-      incomeWeekly: normalized.incomeWeekly,
-      incomeMonthly: normalized.incomeMonthly,
-      incomeYearly: normalized.incomeYearly,
-      status: normalized.status,
-      remark: normalized.remark,
-      updatedAt: now
-    }
-  });
+  const record = await queryOne(
+    `
+      update investments
+      set
+        project = $1,
+        asset_name = $2,
+        url = $3,
+        type = $4,
+        amount = $5,
+        currency = $6,
+        allocation_note = $7,
+        start_time = $8,
+        end_time = $9,
+        apr_expected = $10,
+        apr_actual = $11,
+        income_total = $12,
+        income_daily = $13,
+        income_weekly = $14,
+        income_monthly = $15,
+        income_yearly = $16,
+        status = $17,
+        remark = $18,
+        updated_at = $19
+      where id = $20 and user_id = $21
+      returning ${INVESTMENT_FIELDS}
+    `,
+    [
+      normalized.project,
+      normalized.assetName,
+      normalized.url,
+      normalized.type,
+      normalized.amount,
+      normalized.currency,
+      normalized.allocationNote,
+      normalized.startTime,
+      normalized.endTime,
+      normalized.aprExpected,
+      normalized.aprActual,
+      normalized.incomeTotal,
+      normalized.incomeDaily,
+      normalized.incomeWeekly,
+      normalized.incomeMonthly,
+      normalized.incomeYearly,
+      normalized.status,
+      normalized.remark,
+      now,
+      id,
+      normalizedUserId
+    ]
+  );
 
   return mapRecord(record);
 }
@@ -328,25 +372,20 @@ export async function softDeleteInvestment(userId, id, confirmationText) {
     "请输入 DELETE 以确认删除。"
   );
 
-  await prisma.investment.update({
-    where: {
-      id
-    },
-    data: {
-      isDeleted: true,
-      deletedAt: currentTimestamp(),
-      updatedAt: currentTimestamp()
-    }
-  });
+  const timestamp = currentTimestamp();
+  await execute(
+    `
+      update investments
+      set is_deleted = true, deleted_at = $1, updated_at = $1
+      where id = $2 and user_id = $3
+    `,
+    [timestamp, id, normalizedUserId]
+  );
 
   return true;
 }
 
 export async function clearAllInvestments(userId) {
-  await prisma.investment.deleteMany({
-    where: {
-      userId: normalizeUserId(userId)
-    }
-  });
+  await execute(`delete from investments where user_id = $1`, [normalizeUserId(userId)]);
   return getDashboardSnapshot(userId);
 }

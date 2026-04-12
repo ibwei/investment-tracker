@@ -19,7 +19,7 @@ export default function SettingsWorkspace() {
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Paragraph type="secondary">
               技术方案要求支持 Local Mode / Remote Mode 双存储。当前已接入浏览器 IndexedDB 本地模式，
-              并保留远程模式 API 通路与后续 Prisma/Auth.js 扩展位。
+              并保留远程模式 API 通路与 PostgreSQL 鉴权数据。
             </Paragraph>
             <Segmented
               value={storageMode}
@@ -41,7 +41,7 @@ export default function SettingsWorkspace() {
                 type="success"
                 showIcon
                 message="远程模式"
-                description="当前走服务端 API 链路；接通 Prisma + SQLite + Auth.js 后可启用完整多用户能力。"
+                description="当前走服务端 API 链路，通过 PostgreSQL 保存多用户数据。"
               />
             )}
           </Space>
@@ -49,8 +49,8 @@ export default function SettingsWorkspace() {
 
         <Card title="用户系统状态">
           <Descriptions column={1} bordered>
-            <Descriptions.Item label="认证方案">Auth.js / NextAuth（已预留页面入口）</Descriptions.Item>
-            <Descriptions.Item label="数据库方案">SQLite + Prisma（已切换为统一基线）</Descriptions.Item>
+            <Descriptions.Item label="认证方案">自定义 session cookie + OAuth</Descriptions.Item>
+            <Descriptions.Item label="数据库方案">PostgreSQL + pg</Descriptions.Item>
             <Descriptions.Item label="当前体验建议">
               先使用 <Link href="/dashboard">Dashboard</Link> 录入数据，再在此切换模式验证体验。
             </Descriptions.Item>
@@ -63,7 +63,7 @@ export default function SettingsWorkspace() {
               <Button>前往登录页面</Button>
             </Link>
             <Paragraph type="secondary">
-              下一步可直接接入 `AUTH_SECRET`、Auth.js 和用户表逻辑，完成远程模式正式落地。
+              生产环境需要配置 `AUTH_SECRET`、`DATABASE_URL` 和可选 OAuth 凭据，完成远程模式正式落地。
             </Paragraph>
           </Space>
         </Card>

@@ -31,7 +31,7 @@ Treat these files as the source of product and technical intent, but verify beha
 - Forms: react-hook-form and zod
 - Charts: Recharts
 - Database: PostgreSQL
-- ORM: Prisma
+- Database access: `pg` with parameterized SQL repositories
 - Local storage abstraction: Dexie / IndexedDB
 - Auth: custom session cookie plus OAuth
 - Deployment target: Cloudflare Workers through OpenNext for Cloudflare
@@ -48,16 +48,12 @@ npm run build
 npm run preview
 npm run deploy
 npm run start
-npm run db:push
-npm run db:migrate
 ```
 
 Notes:
 
 - There is no configured test or lint script at the time of writing.
-- `postinstall` runs `prisma generate`.
-- `npm run db:push` maps to `prisma db push`.
-- `npm run db:migrate` maps to `prisma migrate deploy`.
+- New PostgreSQL databases should be initialized with `db/schema.sql`.
 - Do not run production database commands unless the target database is explicit and intentional.
 
 ## Environment
@@ -94,7 +90,7 @@ components/ui/           Local UI primitive wrappers
 hooks/                   Client hooks
 lib/                     Auth, users, investments, calculations, snapshots, i18n, storage
 lib/storage/             Dexie client and repository abstraction
-prisma/                  Prisma schema and local dev database artifacts
+db/                      PostgreSQL schema
 store/                   Global app-level Zustand store
 figma/                   Figma and design reference artifacts
 public/                  Static assets
@@ -111,8 +107,8 @@ The app is organized in five practical layers:
 - Page/API layer: `app/*`
 - Component layer: `components/*`
 - Client state layer: `lib/store.ts`, `store/app-store.js`
-- Domain/service layer: `lib/investments.js`, `lib/snapshot-history.js`, `lib/users.js`
-- Persistence layer: Prisma/PostgreSQL and Dexie repositories
+- Domain/service layer: `lib/investments.ts`, `lib/snapshot-history.ts`, `lib/users.ts`
+- Persistence layer: PostgreSQL via `pg` and Dexie repositories
 
 Current data mode behavior:
 
@@ -135,7 +131,7 @@ Auth is implemented in `lib/auth.js`:
 
 User and OAuth logic lives in:
 
-- `lib/users.js`
+- `lib/users.ts`
 - `lib/oauth.js`
 - `app/api/auth/*`
 
@@ -148,7 +144,7 @@ When adding auth-sensitive code, keep all data scoped by `session.userId`.
 
 ## Data Model
 
-Prisma schema is in `prisma/schema.prisma`; the datasource provider is PostgreSQL.
+PostgreSQL schema is in `db/schema.sql`.
 
 Core models:
 
@@ -202,7 +198,7 @@ Common patterns:
 
 - Use `NextResponse.json(...)`.
 - Set `export const dynamic = "force-dynamic"` for dynamic API routes when needed.
-- Use `export const runtime = "nodejs"` for routes that depend on Node APIs or Prisma.
+- Use `export const runtime = "nodejs"` for routes that depend on Node APIs or PostgreSQL access.
 - Protect user data with `requireSession()`.
 - Return compact JSON errors with an appropriate status.
 
@@ -260,12 +256,12 @@ Cron jobs should:
 
 ## Database and Persistence Rules
 
-- Keep Prisma model names and mapped table/column names consistent with `schema.prisma`.
+- Keep SQL column names in repository queries consistent with `db/schema.sql`.
 - User-owned records must be filtered by `userId`.
 - Respect soft deletion via `isDeleted` and `deletedAt`.
 - Be careful with `clearAllInvestments`; check existing semantics before changing delete behavior.
 - Use repository abstractions in `lib/storage/repositories/*` for client-side investment operations.
-- Do not treat `prisma/dev.db` as the production database; the active Prisma provider is PostgreSQL.
+- Do not add local SQLite files as production data; the active database is PostgreSQL.
 
 ## Verification
 
@@ -275,12 +271,7 @@ Before finishing a code change, run the strongest relevant check available:
 npm run build
 ```
 
-For database schema changes, also run one of the following against the intended database:
-
-```bash
-npm run db:push
-npm run db:migrate
-```
+For database schema changes, update `db/schema.sql` and apply it only to the intended database.
 
 If a dev server is needed for manual verification:
 
@@ -312,15 +303,15 @@ For technical behavior:
 
 - `tech.md`
 - `lib/store.ts`
-- `lib/investments.js`
+- `lib/investments.ts`
 - `lib/calculations.js`
 - `lib/snapshot-history.js`
-- `prisma/schema.prisma`
+- `db/schema.sql`
 
 For auth:
 
 - `lib/auth.js`
-- `lib/users.js`
+- `lib/users.ts`
 - `lib/oauth.js`
 - `components/auth-provider.tsx`
 

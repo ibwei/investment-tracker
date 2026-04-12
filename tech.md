@@ -18,7 +18,7 @@
 - UI：自定义 UI 组件 + Radix UI + Tailwind CSS 4
 - 图表：Recharts
 - 数据库：PostgreSQL
-- ORM：Prisma
+- 数据库访问：`pg` + 参数化 SQL repository
 - 本地存储：Dexie / IndexedDB
 - 鉴权：自定义 session cookie + OAuth
 - 部署目标：Cloudflare Workers（OpenNext for Cloudflare）
@@ -34,7 +34,7 @@
 2. 组件层：`components/*`
 3. 状态与前端数据层：`lib/store.ts`、`store/app-store.js`
 4. 领域与服务层：`lib/investments.js`、`lib/snapshot-history.js`、`lib/users.js`
-5. 持久化层：Prisma + PostgreSQL，以及 Dexie 本地仓库
+5. 持久化层：`pg` + PostgreSQL，以及 Dexie 本地仓库
 
 ### 3.2 运行模式
 
@@ -174,7 +174,7 @@
 
 ### 8.1 数据源
 
-Prisma schema 位于 [prisma/schema.prisma](/Users/baiwei/Desktop/berry/earn/cefidefi/prisma/schema.prisma:1)，当前 `datasource` 使用 `postgresql`。Cloudflare Workers 部署使用 `@prisma/adapter-pg` 连接 PostgreSQL，因此现有 PostgreSQL URL 可以继续使用，前提是数据库允许来自 Cloudflare Workers 的外部连接。
+PostgreSQL schema 位于 [db/schema.sql](/Users/baiwei/Desktop/berry/earn/cefidefi/db/schema.sql:1)。Cloudflare Workers 部署通过 `pg` 和参数化 SQL 连接 PostgreSQL，因此现有 PostgreSQL URL 可以继续使用，前提是数据库允许来自 Cloudflare Workers 的外部连接。
 
 ### 8.2 核心模型
 
@@ -336,13 +336,13 @@ Cron 只处理数据库中 `storageMode = REMOTE` 的用户。
 - 使用 OpenNext for Cloudflare 构建 Next.js SSR/API 应用
 - 使用 Cloudflare Cron 调度快照与到期提醒任务
 - 使用 PostgreSQL 作为正式数据源
-- Prisma 通过 `@prisma/adapter-pg` 适配 Cloudflare Workers 运行时
+- 通过 `pg` 和参数化 SQL repository 访问 PostgreSQL，避免 Prisma runtime/wasm 在 Cloudflare Workers 上的兼容问题
 
 典型部署顺序：
 
 1. 准备或保留 PostgreSQL
 2. 配置 Cloudflare 环境变量和 secrets
-3. 执行 `prisma migrate deploy` 或 `prisma db push`
+3. 新库首次部署时执行 `db/schema.sql`
 4. 执行 `npm run deploy`
 5. 在分析页手动捕获首个快照，或等待 Cron
 

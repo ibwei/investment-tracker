@@ -21,7 +21,7 @@ Earn Compass 是一个用于管理 CeFi / DeFi 收益型投资仓位的 Next.js 
 
 - Next.js 16
 - React 19
-- Prisma
+- pg / parameterized SQL repository
 - PostgreSQL
 - OpenNext Cloudflare
 - Cloudflare Workers
@@ -63,9 +63,7 @@ GITHUB_CLIENT_SECRET="..."
 
 ### 3. 初始化数据库
 
-```bash
-npm run db:push
-```
+首次部署新库时，按需对目标 PostgreSQL 执行 [db/schema.sql](/Users/baiwei/Desktop/berry/earn/cefidefi/db/schema.sql:1)。
 
 ### 4. 启动开发环境
 
@@ -85,8 +83,6 @@ npm run build
 npm run preview
 npm run deploy
 npm run start
-npm run db:push
-npm run db:migrate
 ```
 
 ## 项目结构
@@ -95,7 +91,7 @@ npm run db:migrate
 app/                     Next.js 页面与 API
 components/              页面组件与基础 UI
 lib/                     鉴权、投资逻辑、快照、i18n、状态管理
-prisma/                  Prisma schema
+db/                      PostgreSQL schema
 store/                   全局 app store
 figma/                   Figma 相关产物
 wrangler.jsonc           Cloudflare Workers 与 Cron 配置

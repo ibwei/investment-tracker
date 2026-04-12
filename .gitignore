@@ -5,7 +5,6 @@ node_modules
 .env
 .env.local
 .dev.vars
-generated/prisma
 storage/*.sqlite
 storage/*.sqlite-*
 !.gitkeep

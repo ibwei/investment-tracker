@@ -1,11 +1,11 @@
 # Cloudflare Deployment
 
-Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. The app still uses PostgreSQL through Prisma; the existing PostgreSQL connection URL can be reused as long as the database accepts external connections from Cloudflare Workers.
+Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. The app uses PostgreSQL through `pg` and a small SQL repository layer; the existing PostgreSQL connection URL can be reused as long as the database accepts external connections from Cloudflare Workers.
 
 ## Required Environment Variables
 
 - Secrets:
-  - `DATABASE_URL`: PostgreSQL connection string used by Prisma in production.
+  - `DATABASE_URL`: PostgreSQL connection string used by the runtime API routes in production.
   - `AUTH_SECRET`: long random string for signing session cookies.
   - `CRON_SECRET`: long random string used by cron routes.
   - `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
@@ -22,7 +22,7 @@ For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill i
 
 ## Runtime Vars vs Build Vars
 
-- `Settings > Variables and Secrets` is for Worker runtime values. Registration, login, Prisma, cron, and OAuth all read from runtime values.
+- `Settings > Variables and Secrets` is for Worker runtime values. Registration, login, cron, and OAuth all read from runtime values.
 - `Settings > Build > Environment variables` is only for the Git build machine. Values configured there do not appear at runtime inside the deployed Worker.
 - `wrangler deploy` treats `wrangler.jsonc` as the source of truth for dashboard vars unless `keep_vars` is enabled.
 - This repository sets `"keep_vars": true` in [wrangler.jsonc](/Users/baiwei/Desktop/berry/earn/cefidefi/wrangler.jsonc:1) so dashboard-managed runtime vars are preserved across deploys.
@@ -42,7 +42,7 @@ For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill i
 
 1. Keep or provision a PostgreSQL database for production.
 2. Run `npm install`.
-3. Run `npm run db:migrate` or `npm run db:push` against the intended database before the first cron run.
+3. If this is a new database, run [db/schema.sql](/Users/baiwei/Desktop/berry/earn/cefidefi/db/schema.sql:1) against the intended PostgreSQL database before the first cron run.
 4. Add Cloudflare runtime secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, `RESEND_API_KEY`, and OAuth secrets if used.
 5. Configure runtime non-secret vars such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, `RESEND_FROM_EMAIL`, and OAuth client IDs in `Settings > Variables and Secrets`.
 6. In the Cloudflare Git build settings, set:
@@ -60,8 +60,6 @@ npm run build
 npm run preview
 npm run deploy
 npm run cf-typegen
-npm run db:push
-npm run db:migrate
 ```
 
 ## Notes
@@ -72,6 +70,6 @@ npm run db:migrate
 - `npx wrangler deploy` is the deploy command after `npm run build` has produced `.open-next`; it is not a replacement for the build command.
 - The Next.js production build uses webpack explicitly to avoid Turbopack process/port issues in restricted CI environments.
 - Cron schedules on Cloudflare are interpreted in `UTC`.
-- The project uses `compatibility_flags: ["nodejs_compat"]` because auth and Prisma rely on Node-compatible APIs.
-- Prisma uses `@prisma/adapter-pg` so PostgreSQL access works in the Cloudflare Workers runtime.
+- The project uses `compatibility_flags: ["nodejs_compat"]` because auth and `pg` rely on Node-compatible APIs.
+- Database access uses parameterized SQL through `pg`; Prisma is not used at runtime.
 - Keeping a Vercel-provisioned PostgreSQL URL is acceptable for the migration phase if the database allows external connections and the latency is acceptable. Moving the database can be evaluated separately after the application is stable on Cloudflare.

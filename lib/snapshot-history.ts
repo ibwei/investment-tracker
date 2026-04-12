@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { query, queryOne, withTransaction } from "@/lib/db";
 import { normalizeInvestmentRecord } from "@/lib/snapshot";
 import { toAppDateKey } from "@/lib/time";
 import { getUserTimeZone } from "@/lib/users";
@@ -60,14 +60,56 @@ function mapRow(record) {
   };
 }
 
+const INVESTMENT_FIELDS = `
+  id,
+  user_id as "userId",
+  project,
+  asset_name as "assetName",
+  url,
+  type,
+  amount,
+  currency,
+  allocation_note as "allocationNote",
+  start_time as "startTime",
+  end_time as "endTime",
+  apr_expected as "aprExpected",
+  apr_actual as "aprActual",
+  income_total as "incomeTotal",
+  income_daily as "incomeDaily",
+  income_weekly as "incomeWeekly",
+  income_monthly as "incomeMonthly",
+  income_yearly as "incomeYearly",
+  status,
+  remark,
+  is_deleted as "isDeleted",
+  created_at as "createdAt",
+  updated_at as "updatedAt"
+`;
+
+const PORTFOLIO_SNAPSHOT_FIELDS = `
+  snapshot_date as "snapshotDate",
+  total_principal as "totalPrincipal",
+  portfolio_apr_expected as "portfolioAprExpected",
+  portfolio_apr_actual as "portfolioAprActual",
+  total_income_daily as "totalIncomeDaily",
+  total_income_weekly as "totalIncomeWeekly",
+  total_income_monthly as "totalIncomeMonthly",
+  total_income_yearly as "totalIncomeYearly",
+  cumulative_income as "cumulativeIncome",
+  active_investment_count as "activeInvestmentCount",
+  created_at as "createdAt"
+`;
+
 async function fetchInvestments(userId) {
-  return prisma.investment.findMany({
-    where: {
-      userId: normalizeUserId(userId),
-      isDeleted: false
-    },
-    orderBy: [{ id: "asc" }]
-  });
+  return query(
+    `
+      select ${INVESTMENT_FIELDS}
+      from investments
+      where user_id = $1 and is_deleted = false
+      order by id asc
+    `,
+    [normalizeUserId(userId)]
+  );
 }
 
 function buildPortfolioSnapshotPayload(records, capturedAt, timeZone) {
@@ -151,80 +193,86 @@ export async function captureUserSnapshots(
     timeZone
   );
 
-  await prisma.$transaction([
-    ...normalizedRecords.map((record) =>
-      prisma.investmentDailySnapshot.upsert({
-        where: {
-          investmentId_snapshotDate: {
-            investmentId: Number(record.id),
-            snapshotDate
-          }
-        },
-        update: {
-          userId: normalizedUserId,
-          principal: record.metrics.amount,
-          aprExpected: record.metrics.expectedApr,
-          aprActual: record.metrics.actualApr,
-          incomeDaily: record.metrics.dailyIncome,
-          incomeWeekly: record.metrics.weeklyIncome,
-          incomeMonthly: record.metrics.monthlyIncome,
-          incomeYearly: record.metrics.yearlyIncome,
-          incomeTotal: record.metrics.totalIncome,
-          status: record.status,
-          createdAt
-        },
-        create: {
-          userId: normalizedUserId,
-          investmentId: Number(record.id),
+  await withTransaction(async (client) => {
+    for (const record of normalizedRecords) {
+      await client.query(
+        `
+          insert into investment_daily_snapshots (
+            user_id, investment_id, snapshot_date, principal, apr_expected, apr_actual,
+            income_daily, income_weekly, income_monthly, income_yearly, income_total,
+            status, created_at
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          on conflict (investment_id, snapshot_date)
+          do update set
+            user_id = excluded.user_id,
+            principal = excluded.principal,
+            apr_expected = excluded.apr_expected,
+            apr_actual = excluded.apr_actual,
+            income_daily = excluded.income_daily,
+            income_weekly = excluded.income_weekly,
+            income_monthly = excluded.income_monthly,
+            income_yearly = excluded.income_yearly,
+            income_total = excluded.income_total,
+            status = excluded.status,
+            created_at = excluded.created_at
+        `,
+        [
+          normalizedUserId,
+          Number(record.id),
           snapshotDate,
-          principal: record.metrics.amount,
-          aprExpected: record.metrics.expectedApr,
-          aprActual: record.metrics.actualApr,
-          incomeDaily: record.metrics.dailyIncome,
-          incomeWeekly: record.metrics.weeklyIncome,
-          incomeMonthly: record.metrics.monthlyIncome,
-          incomeYearly: record.metrics.yearlyIncome,
-          incomeTotal: record.metrics.totalIncome,
-          status: record.status,
+          record.metrics.amount,
+          record.metrics.expectedApr,
+          record.metrics.actualApr,
+          record.metrics.dailyIncome,
+          record.metrics.weeklyIncome,
+          record.metrics.monthlyIncome,
+          record.metrics.yearlyIncome,
+          record.metrics.totalIncome,
+          record.status,
           createdAt
-        }
-      })
-    ),
-    prisma.portfolioDailySnapshot.upsert({
-      where: {
-        userId_snapshotDate: {
-          userId: normalizedUserId,
-          snapshotDate
-        }
-      },
-      update: {
-        totalPrincipal: portfolio.totalPrincipal,
-        portfolioAprExpected: portfolio.portfolioAprExpected,
-        portfolioAprActual: portfolio.portfolioAprActual,
-        totalIncomeDaily: portfolio.totalIncomeDaily,
-        totalIncomeWeekly: portfolio.totalIncomeWeekly,
-        totalIncomeMonthly: portfolio.totalIncomeMonthly,
-        totalIncomeYearly: portfolio.totalIncomeYearly,
-        cumulativeIncome: portfolio.cumulativeIncome,
-        activeInvestmentCount: portfolio.activeInvestmentCount,
-        createdAt
-      },
-      create: {
-        userId: normalizedUserId,
+        ]
+      );
+    }
+
+    await client.query(
+      `
+        insert into portfolio_daily_snapshots (
+          user_id, snapshot_date, total_principal, portfolio_apr_expected,
+          portfolio_apr_actual, total_income_daily, total_income_weekly,
+          total_income_monthly, total_income_yearly, cumulative_income,
+          active_investment_count, created_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        on conflict (user_id, snapshot_date)
+        do update set
+          total_principal = excluded.total_principal,
+          portfolio_apr_expected = excluded.portfolio_apr_expected,
+          portfolio_apr_actual = excluded.portfolio_apr_actual,
+          total_income_daily = excluded.total_income_daily,
+          total_income_weekly = excluded.total_income_weekly,
+          total_income_monthly = excluded.total_income_monthly,
+          total_income_yearly = excluded.total_income_yearly,
+          cumulative_income = excluded.cumulative_income,
+          active_investment_count = excluded.active_investment_count,
+          created_at = excluded.created_at
+      `,
+      [
+        normalizedUserId,
         snapshotDate,
-        totalPrincipal: portfolio.totalPrincipal,
-        portfolioAprExpected: portfolio.portfolioAprExpected,
-        portfolioAprActual: portfolio.portfolioAprActual,
-        totalIncomeDaily: portfolio.totalIncomeDaily,
-        totalIncomeWeekly: portfolio.totalIncomeWeekly,
-        totalIncomeMonthly: portfolio.totalIncomeMonthly,
-        totalIncomeYearly: portfolio.totalIncomeYearly,
-        cumulativeIncome: portfolio.cumulativeIncome,
-        activeInvestmentCount: portfolio.activeInvestmentCount,
+        portfolio.totalPrincipal,
+        portfolio.portfolioAprExpected,
+        portfolio.portfolioAprActual,
+        portfolio.totalIncomeDaily,
+        portfolio.totalIncomeWeekly,
+        portfolio.totalIncomeMonthly,
+        portfolio.totalIncomeYearly,
+        portfolio.cumulativeIncome,
+        portfolio.activeInvestmentCount,
         createdAt
-      }
-    })
-  ]);
+      ]
+    );
+  });
 
   return {
     snapshotDate,
@@ -234,16 +282,14 @@ export async function captureUserSnapshots(
 }
 
 export async function captureSnapshotsForRemoteUsers(capturedAt = new Date()) {
-  const users = await prisma.user.findMany({
-    where: {
-      storageMode: "REMOTE"
-    },
-    select: {
-      id: true,
-      timezone: true
-    },
-    orderBy: [{ id: "asc" }]
-  });
+  const users = await query<{ id: number; timezone: string }>(
+    `
+      select id, timezone
+      from users
+      where storage_mode = 'REMOTE'
+      order by id asc
+    `
+  );
 
   let processedUsers = 0;
   let processedInvestments = 0;
@@ -272,20 +318,17 @@ export async function listPortfolioSnapshots(
       ? options.startDate
       : null;
 
-  const snapshots = await prisma.portfolioDailySnapshot.findMany({
-    where: {
-      userId: normalizedUserId,
-      ...(startDate
-        ? {
-            snapshotDate: {
-              gte: startDate
-            }
-          }
-        : {})
-    },
-    orderBy: [{ snapshotDate: startDate ? "asc" : "desc" }],
-    take: startDate ? undefined : days
-  });
+  const snapshots = await query(
+    `
+      select ${PORTFOLIO_SNAPSHOT_FIELDS}
+      from portfolio_daily_snapshots
+      where user_id = $1
+        ${startDate ? "and snapshot_date >= $2" : ""}
+      order by snapshot_date ${startDate ? "asc" : "desc"}
+      ${startDate ? "" : "limit $2"}
+    `,
+    startDate ? [normalizedUserId, startDate] : [normalizedUserId, days]
+  );
 
   const orderedSnapshots = startDate ? snapshots : snapshots.reverse();
 
@@ -314,23 +357,25 @@ export async function writeScheduledJobLog({
   startedAt = null,
   finishedAt = null
 }) {
-  return prisma.scheduledJobLog.upsert({
-    where: {
-      jobName_runDate: {
-        jobName,
-        runDate
-      }
-    },
-    update: {
-      status,
-      processedCount,
-      durationMs,
-      errorMessage,
-      startedAt,
-      finishedAt,
-      createdAt: startedAt ?? toIsoTimestamp()
-    },
-    create: {
+  return queryOne(
+    `
+      insert into scheduled_job_logs (
+        job_name, run_date, status, processed_count, duration_ms,
+        error_message, started_at, finished_at, created_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      on conflict (job_name, run_date)
+      do update set
+        status = excluded.status,
+        processed_count = excluded.processed_count,
+        duration_ms = excluded.duration_ms,
+        error_message = excluded.error_message,
+        started_at = excluded.started_at,
+        finished_at = excluded.finished_at,
+        created_at = excluded.created_at
+      returning *
+    `,
+    [
       jobName,
       runDate,
       status,
@@ -339,7 +384,7 @@ export async function writeScheduledJobLog({
       errorMessage,
       startedAt,
       finishedAt,
-      createdAt: startedAt ?? toIsoTimestamp()
-    }
-  });
+      startedAt ?? toIsoTimestamp()
+    ]
+  );
 }
