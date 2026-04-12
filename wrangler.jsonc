@@ -1,14 +1,19 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "earn-compass",
+  "name": "investment-tracker",
   "main": "./custom-worker.js",
   "compatibility_date": "2026-04-12",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
   "triggers": {
-    "crons": ["0 12 * * *", "0 2 * * *"]
+    "crons": [
+      "0 12 * * *",
+      "0 2 * * *"
+    ]
   }
 }
