@@ -4,17 +4,28 @@ Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. 
 
 ## Required Environment Variables
 
-- `DATABASE_URL`: PostgreSQL connection string used by Prisma in production.
-- `AUTH_SECRET`: long random string for signing session cookies.
-- `CRON_SECRET`: long random string used by cron routes.
-- `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
-- `RESEND_FROM_EMAIL`: sender identity for reminder emails, for example `CeFiDeFi <alerts@yourdomain.com>`.
-- `APP_URL`: production app URL, for example `https://earn-compass.example.workers.dev`.
-- `NEXT_PUBLIC_APP_URL`: public app URL used by client-visible metadata and links.
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: optional, if Google OAuth is enabled.
-- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`: optional, if GitHub OAuth is enabled.
+- Secrets:
+  - `DATABASE_URL`: PostgreSQL connection string used by Prisma in production.
+  - `AUTH_SECRET`: long random string for signing session cookies.
+  - `CRON_SECRET`: long random string used by cron routes.
+  - `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
+  - `GOOGLE_CLIENT_SECRET`: optional, if Google OAuth is enabled.
+  - `GITHUB_CLIENT_SECRET`: optional, if GitHub OAuth is enabled.
+- Non-secret runtime vars:
+  - `RESEND_FROM_EMAIL`: sender identity for reminder emails, for example `CeFiDeFi <alerts@yourdomain.com>`.
+  - `APP_URL`: production app URL, for example `https://earn-compass.example.workers.dev`.
+  - `NEXT_PUBLIC_APP_URL`: public app URL used by client-visible metadata and links.
+  - `GOOGLE_CLIENT_ID`: optional, if Google OAuth is enabled.
+  - `GITHUB_CLIENT_ID`: optional, if GitHub OAuth is enabled.
 
 For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill in real values. Do not commit `.dev.vars`.
+
+## Runtime Vars vs Build Vars
+
+- `Settings > Variables and Secrets` is for Worker runtime values. Registration, login, Prisma, cron, and OAuth all read from runtime values.
+- `Settings > Build > Environment variables` is only for the Git build machine. Values configured there do not appear at runtime inside the deployed Worker.
+- `wrangler deploy` treats `wrangler.jsonc` as the source of truth for dashboard vars unless `keep_vars` is enabled.
+- This repository sets `"keep_vars": true` in [wrangler.jsonc](/Users/baiwei/Desktop/berry/earn/cefidefi/wrangler.jsonc:1) so dashboard-managed runtime vars are preserved across deploys.
 
 ## Scheduled Jobs
 
@@ -32,8 +43,8 @@ For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill i
 1. Keep or provision a PostgreSQL database for production.
 2. Run `npm install`.
 3. Run `npm run db:migrate` or `npm run db:push` against the intended database before the first cron run.
-4. Add Cloudflare secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, `RESEND_API_KEY`, and OAuth secrets if used.
-5. Configure non-secret Cloudflare variables such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, and `RESEND_FROM_EMAIL`.
+4. Add Cloudflare runtime secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, `RESEND_API_KEY`, and OAuth secrets if used.
+5. Configure runtime non-secret vars such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, `RESEND_FROM_EMAIL`, and OAuth client IDs in `Settings > Variables and Secrets`.
 6. In the Cloudflare Git build settings, set:
    - Build command: `npm run build`
    - Deploy command: `npx wrangler deploy`

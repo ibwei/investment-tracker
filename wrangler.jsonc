@@ -3,6 +3,9 @@
   "name": "investment-tracker",
   "main": "./custom-worker.js",
   "compatibility_date": "2026-04-12",
+  // Preserve dashboard-managed runtime vars on deploy. Secrets still belong in
+  // Cloudflare Secrets and should not be checked into this file.
+  "keep_vars": true,
   "compatibility_flags": [
     "nodejs_compat"
   ],
