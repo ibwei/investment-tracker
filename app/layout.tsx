@@ -1,29 +1,16 @@
 import "@/app/globals.css";
-import { Geist_Mono, Inter } from "next/font/google";
 
 import { AuthProvider } from "@/components/auth-provider";
 import { I18nProvider } from "@/lib/i18n";
 import { getSession } from "@/lib/auth";
 import { getUserById } from "@/lib/users";
 import { Toaster } from "@/components/ui/sonner";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
 const siteName = "Earn Compass";
 const siteTitle = "Earn Compass - CeFi & DeFi Investment Management";
 const siteDescription =
   "Track CeFi and DeFi investment positions, monitor real-time income, compare APR performance, and review portfolio snapshots in one dashboard.";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter"
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono"
-});
 
 export const metadata = {
   metadataBase: new URL(siteUrl),
@@ -106,10 +93,8 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${geistMono.variable} bg-background font-sans text-foreground antialiased`}
+        className="bg-background font-sans text-foreground antialiased"
       >
-        <Analytics />
-        <SpeedInsights />
         <AuthProvider initialUser={user}>
           <I18nProvider>
             {children}

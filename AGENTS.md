@@ -34,8 +34,8 @@ Treat these files as the source of product and technical intent, but verify beha
 - ORM: Prisma
 - Local storage abstraction: Dexie / IndexedDB
 - Auth: custom session cookie plus OAuth
-- Deployment target: Vercel
-- Observability: Vercel Analytics and Speed Insights
+- Deployment target: Cloudflare Workers through OpenNext for Cloudflare
+- Observability: no platform analytics SDK is currently wired; Cloudflare Web Analytics / Zaraz can be added later
 
 ## Common Commands
 
@@ -45,6 +45,8 @@ Use npm as the primary package manager because `package-lock.json` is present.
 npm install
 npm run dev
 npm run build
+npm run preview
+npm run deploy
 npm run start
 npm run db:push
 npm run db:migrate
@@ -66,6 +68,7 @@ Required production variables:
 - `AUTH_SECRET`
 - `CRON_SECRET`
 - `APP_URL`
+- `NEXT_PUBLIC_APP_URL`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 
@@ -219,12 +222,12 @@ Key APIs:
 
 ## Cron Jobs
 
-Vercel cron configuration is in `vercel.json`:
+Cloudflare cron configuration is in `wrangler.jsonc`:
 
 - `/api/cron/snapshots` runs daily at `12:00 UTC`.
 - `/api/cron/investments/expiry-reminders` runs daily at `02:00 UTC`.
 
-Cron routes require `CRON_SECRET`. Vercel Production sends it as `Authorization: Bearer <CRON_SECRET>`. Routes may also accept `x-cron-secret` for manual testing if implemented.
+Cloudflare calls `custom-worker.js` through the Worker `scheduled()` handler. The handler forwards to the existing cron API routes with `Authorization: Bearer <CRON_SECRET>`. Routes may also accept `x-cron-secret` for manual testing if implemented.
 
 Cron jobs should:
 
@@ -324,5 +327,6 @@ For auth:
 For deployment:
 
 - `DEPLOY.md`
-- `vercel.json`
+- `wrangler.jsonc`
+- `custom-worker.js`
 - `app/api/cron/*`

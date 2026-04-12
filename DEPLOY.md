@@ -1,4 +1,6 @@
-# Vercel Deployment
+# Cloudflare Deployment
+
+Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. The app still uses PostgreSQL through Prisma; the existing PostgreSQL connection URL can be reused as long as the database accepts external connections from Cloudflare Workers.
 
 ## Required Environment Variables
 
@@ -7,30 +9,48 @@
 - `CRON_SECRET`: long random string used by cron routes.
 - `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
 - `RESEND_FROM_EMAIL`: sender identity for reminder emails, for example `CeFiDeFi <alerts@yourdomain.com>`.
-- `APP_URL`: your production app URL, for example `https://your-project.vercel.app`.
+- `APP_URL`: production app URL, for example `https://earn-compass.example.workers.dev`.
+- `NEXT_PUBLIC_APP_URL`: public app URL used by client-visible metadata and links.
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: optional, if Google OAuth is enabled.
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`: optional, if GitHub OAuth is enabled.
 
+For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill in real values. Do not commit `.dev.vars`.
+
 ## Scheduled Jobs
 
-- `vercel.json` schedules `/api/cron/snapshots` at `12:00 UTC` every day. This route also converts matured `ONGOING` investments into `ENDED` before capturing snapshots.
-- `vercel.json` schedules `/api/cron/investments/expiry-reminders` at `02:00 UTC` every day.
+- `wrangler.jsonc` schedules `/api/cron/snapshots` at `12:00 UTC` every day. This route also converts matured `ONGOING` investments into `ENDED` before capturing snapshots.
+- `wrangler.jsonc` schedules `/api/cron/investments/expiry-reminders` at `02:00 UTC` every day.
 - `12:00 UTC` equals `20:00` in `Asia/Shanghai`.
 - `02:00 UTC` equals `10:00` in `Asia/Shanghai`.
-- The cron route requires `CRON_SECRET`.
-- On Vercel Production, cron invocations automatically include `Authorization: Bearer <CRON_SECRET>`.
-- The route also accepts `x-cron-secret` so you can test it manually from tools like `curl` or Postman.
+- Cloudflare calls `custom-worker.js` through the Worker `scheduled()` handler.
+- The scheduled handler forwards requests to the existing cron API routes with `Authorization: Bearer <CRON_SECRET>`.
+- The cron routes also accept `x-cron-secret` so they can be tested manually from tools like `curl` or Postman.
 - The expiry reminder route emails each active user with `ONGOING` investments every day. Investments expiring in the next 24 hours are shown first, followed by the user's other active investments.
 
 ## First Production Deploy
 
-1. Provision a PostgreSQL database for production.
-2. Add the environment variables in the Vercel project settings.
-3. Run `prisma migrate deploy` or `prisma db push` against the production database before the cron runs.
-4. Deploy the app to Vercel.
-5. Visit `/analytics` and use "Capture Today" once if you want an immediate first snapshot instead of waiting for the scheduled run.
+1. Keep or provision a PostgreSQL database for production.
+2. Run `npm install`.
+3. Run `npm run db:migrate` or `npm run db:push` against the intended database before the first cron run.
+4. Add Cloudflare secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, `RESEND_API_KEY`, and OAuth secrets if used.
+5. Configure non-secret Cloudflare variables such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, and `RESEND_FROM_EMAIL`.
+6. Deploy with `npm run deploy`.
+7. Visit `/analytics` and use "Capture Today" once if you want an immediate first snapshot instead of waiting for the scheduled run.
+
+## Useful Commands
+
+```bash
+npm run build
+npm run preview
+npm run deploy
+npm run cf-typegen
+npm run db:push
+npm run db:migrate
+```
 
 ## Notes
 
-- Vercel cron jobs run only on the `Production` deployment.
-- Cron schedules on Vercel are always interpreted in `UTC`.
+- Cron schedules on Cloudflare are interpreted in `UTC`.
+- The project uses `compatibility_flags: ["nodejs_compat"]` because auth and Prisma rely on Node-compatible APIs.
+- Prisma uses `@prisma/adapter-pg` so PostgreSQL access works in the Cloudflare Workers runtime.
+- Keeping a Vercel-provisioned PostgreSQL URL is acceptable for the migration phase if the database allows external connections and the latency is acceptable. Moving the database can be evaluated separately after the application is stable on Cloudflare.

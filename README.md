@@ -23,6 +23,8 @@ Earn Compass 是一个用于管理 CeFi / DeFi 收益型投资仓位的 Next.js 
 - React 19
 - Prisma
 - PostgreSQL
+- OpenNext Cloudflare
+- Cloudflare Workers
 - Zustand
 - Tailwind CSS 4
 - Radix UI
@@ -80,6 +82,8 @@ npm run dev
 ```bash
 npm run dev
 npm run build
+npm run preview
+npm run deploy
 npm run start
 npm run db:push
 npm run db:migrate
@@ -94,7 +98,8 @@ lib/                     鉴权、投资逻辑、快照、i18n、状态管理
 prisma/                  Prisma schema
 store/                   全局 app store
 figma/                   Figma 相关产物
-vercel.json              Vercel Cron 配置
+wrangler.jsonc           Cloudflare Workers 与 Cron 配置
+custom-worker.js         OpenNext Worker 入口与定时任务转发
 prd.md                   最新产品文档
 tech.md                  最新技术文档
 ```
@@ -108,7 +113,7 @@ tech.md                  最新技术文档
 
 ## 部署
 
-项目默认面向 Vercel 部署，详细说明可参考 [DEPLOY.md](/Users/baiwei/Desktop/berry/earn/cefidefi/DEPLOY.md:1)。
+项目默认面向 Cloudflare Workers 部署，详细说明可参考 [DEPLOY.md](/Users/baiwei/Desktop/berry/earn/cefidefi/DEPLOY.md:1)。
 
 生产环境必须配置：
 
@@ -116,6 +121,7 @@ tech.md                  最新技术文档
 - `AUTH_SECRET`
 - `CRON_SECRET`
 - `APP_URL`
+- `NEXT_PUBLIC_APP_URL`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 

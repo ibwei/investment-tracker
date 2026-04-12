@@ -21,8 +21,8 @@
 - ORM：Prisma
 - 本地存储：Dexie / IndexedDB
 - 鉴权：自定义 session cookie + OAuth
-- 部署目标：Vercel
-- 监控：Vercel Analytics
+- 部署目标：Cloudflare Workers（OpenNext for Cloudflare）
+- 监控：暂未绑定平台监控 SDK，可后续接入 Cloudflare Web Analytics / Zaraz / 自有监控
 
 ## 3. 系统架构
 
@@ -174,7 +174,7 @@
 
 ### 8.1 数据源
 
-Prisma schema 位于 [prisma/schema.prisma](/Users/baiwei/Desktop/berry/earn/cefidefi/prisma/schema.prisma:1)，当前 `datasource` 使用 `postgresql`。
+Prisma schema 位于 [prisma/schema.prisma](/Users/baiwei/Desktop/berry/earn/cefidefi/prisma/schema.prisma:1)，当前 `datasource` 使用 `postgresql`。Cloudflare Workers 部署使用 `@prisma/adapter-pg` 连接 PostgreSQL，因此现有 PostgreSQL URL 可以继续使用，前提是数据库允许来自 Cloudflare Workers 的外部连接。
 
 ### 8.2 核心模型
 
@@ -288,9 +288,12 @@ Prisma schema 位于 [prisma/schema.prisma](/Users/baiwei/Desktop/berry/earn/cef
 
 ### 11.1 定时任务配置
 
-`vercel.json` 当前配置：
+`wrangler.jsonc` 当前配置：
 
 - 每天 `12:00 UTC` 执行 `/api/cron/snapshots`
+- 每天 `02:00 UTC` 执行 `/api/cron/investments/expiry-reminders`
+
+Cloudflare Cron 进入 `custom-worker.js` 的 `scheduled()` handler，然后由 Worker 带上 `Authorization: Bearer <CRON_SECRET>` 转发到现有 cron API 路由。这样业务逻辑仍集中在 `app/api/cron/*` 中。
 
 ### 11.2 快照策略
 
@@ -314,6 +317,9 @@ Cron 只处理数据库中 `storageMode = REMOTE` 的用户。
 - `AUTH_SECRET`
 - `CRON_SECRET`
 - `APP_URL`
+- `NEXT_PUBLIC_APP_URL`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
 
 按需启用 OAuth：
 
@@ -324,18 +330,20 @@ Cron 只处理数据库中 `storageMode = REMOTE` 的用户。
 
 ## 13. 部署说明
 
-项目默认面向 Vercel 部署：
+项目默认面向 Cloudflare Workers 部署：
 
-- `DEPLOY.md` 已说明生产环境变量
-- 使用 Vercel Cron 调度快照任务
+- `DEPLOY.md` 已说明生产环境变量、Cloudflare secrets 和 preview/deploy 命令
+- 使用 OpenNext for Cloudflare 构建 Next.js SSR/API 应用
+- 使用 Cloudflare Cron 调度快照与到期提醒任务
 - 使用 PostgreSQL 作为正式数据源
+- Prisma 通过 `@prisma/adapter-pg` 适配 Cloudflare Workers 运行时
 
 典型部署顺序：
 
-1. 准备 PostgreSQL
-2. 配置环境变量
+1. 准备或保留 PostgreSQL
+2. 配置 Cloudflare 环境变量和 secrets
 3. 执行 `prisma migrate deploy` 或 `prisma db push`
-4. 部署应用
+4. 执行 `npm run deploy`
 5. 在分析页手动捕获首个快照，或等待 Cron
 
 ## 14. 当前代码与旧方案的差异
