@@ -3,6 +3,13 @@ generator client {
   engineType = "client"
 }
 
+generator cloudflare {
+  provider   = "prisma-client"
+  runtime    = "cloudflare"
+  output     = "../generated/prisma"
+  engineType = "client"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
