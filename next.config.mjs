@@ -1,14 +1,33 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const prismaClientEntry = path.join(projectRoot, "lib/prisma-client.ts");
+const prismaClientNodeEntry = path.join(projectRoot, "lib/prisma-client.node.ts");
+const prismaClientCloudflareEntry = path.join(projectRoot, "lib/prisma-client.cloudflare.ts");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typedRoutes: false,
   webpack(config) {
     const isCloudflarePrismaBuild = process.env.PRISMA_RUNTIME === "cloudflare";
+    const prismaClientTarget = isCloudflarePrismaBuild
+      ? prismaClientCloudflareEntry
+      : prismaClientEntry;
 
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
-      "@/lib/prisma-client$": isCloudflarePrismaBuild
-        ? new URL("./lib/prisma-client.cloudflare.ts", import.meta.url).pathname
-        : new URL("./lib/prisma-client.ts", import.meta.url).pathname
+      "@/lib/prisma-client": prismaClientTarget,
+      "@/lib/prisma-client$": prismaClientTarget,
+      "@/lib/prisma-client.ts": prismaClientTarget,
+      [prismaClientEntry]: prismaClientTarget,
+      ...(isCloudflarePrismaBuild
+        ? {
+            "@/lib/prisma-client.node": prismaClientCloudflareEntry,
+            "@/lib/prisma-client.node$": prismaClientCloudflareEntry,
+            [prismaClientNodeEntry]: prismaClientCloudflareEntry
+          }
+        : {})
     };
 
     if (isCloudflarePrismaBuild) {
