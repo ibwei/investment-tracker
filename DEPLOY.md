@@ -40,6 +40,7 @@ For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill i
 ## Useful Commands
 
 ```bash
+npm run next:build
 npm run build
 npm run preview
 npm run deploy
@@ -50,6 +51,9 @@ npm run db:migrate
 
 ## Notes
 
+- `npm run next:build` runs a plain Next.js production build.
+- `npm run build` runs the OpenNext for Cloudflare build and writes `.open-next/worker.js` plus `.open-next/assets`.
+- The Next.js production build uses webpack explicitly to avoid Turbopack process/port issues in restricted CI environments.
 - Cron schedules on Cloudflare are interpreted in `UTC`.
 - The project uses `compatibility_flags: ["nodejs_compat"]` because auth and Prisma rely on Node-compatible APIs.
 - Prisma uses `@prisma/adapter-pg` so PostgreSQL access works in the Cloudflare Workers runtime.
