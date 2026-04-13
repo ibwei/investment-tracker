@@ -55,13 +55,28 @@ export function toProviderNetworkError(provider: string, error: unknown) {
   );
 }
 
-export async function fetchJson<T>(provider: string, url: string, init?: RequestInit) {
+type FetchJsonInit = RequestInit & {
+  timeoutMs?: number;
+};
+
+export async function fetchJson<T>(provider: string, url: string, init?: FetchJsonInit) {
+  const { timeoutMs, signal, ...requestInit } = init ?? {};
+  const controller = timeoutMs ? new AbortController() : null;
+  const timeout = controller
+    ? setTimeout(() => controller.abort(new Error(`${provider} request timed out after ${timeoutMs}ms.`)), timeoutMs)
+    : null;
+
   const response = await fetch(url, {
-    ...init,
+    ...requestInit,
     cache: "no-store",
+    signal: signal ?? controller?.signal,
     dispatcher: getDevelopmentProxyAgent(),
   } as RequestInit & { dispatcher?: ReturnType<typeof getDevelopmentProxyAgent> }).catch((error) => {
     throw toProviderNetworkError(provider, error);
+  }).finally(() => {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
   });
 
   if (!response.ok) {
