@@ -57,6 +57,7 @@ npm install
 ```env
 DATABASE_URL="postgresql://..."
 AUTH_SECRET="replace-with-a-long-random-string"
+ASSET_CREDENTIAL_ENCRYPTION_KEY="base64:replace-with-openssl-rand-base64-32"
 CRON_SECRET="replace-with-a-long-random-string"
 APP_URL="http://localhost:3000"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
@@ -72,6 +73,14 @@ GOOGLE_CLIENT_SECRET="..."
 GITHUB_CLIENT_ID="..."
 GITHUB_CLIENT_SECRET="..."
 ```
+
+`ASSET_CREDENTIAL_ENCRYPTION_KEY` 用于加密保存 CEX API Key、API Secret 和 Passphrase。建议生成 32 字节随机主密钥：
+
+```bash
+openssl rand -base64 32
+```
+
+把输出保存为 `base64:<output>`。这个值只放在本地 `.env` 或 Cloudflare Secret，不要提交到仓库。
 
 ### 3. 初始化数据库
 
@@ -178,6 +187,7 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 
 - `DATABASE_URL`
 - `AUTH_SECRET`
+- `ASSET_CREDENTIAL_ENCRYPTION_KEY`
 - `CRON_SECRET`
 - `APP_URL`
 - `NEXT_PUBLIC_APP_URL`

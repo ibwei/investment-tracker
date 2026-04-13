@@ -7,6 +7,7 @@ Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. 
 - Secrets:
   - `DATABASE_URL`: PostgreSQL connection string used by the runtime API routes in production.
   - `AUTH_SECRET`: long random string for signing session cookies.
+  - `ASSET_CREDENTIAL_ENCRYPTION_KEY`: 32-byte master key for encrypting stored CEX API Key, API Secret, and Passphrase values. Generate with `openssl rand -base64 32` and store as `base64:<output>`.
   - `CRON_SECRET`: long random string used by cron routes.
   - `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
   - `GOOGLE_CLIENT_SECRET`: optional, if Google OAuth is enabled.
@@ -44,7 +45,7 @@ For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill i
 1. Keep or provision a PostgreSQL database for production.
 2. Run `npm install`.
 3. If this is a new database, run [db/schema.sql](/Users/baiwei/Desktop/berry/earn/cefidefi/db/schema.sql:1) against the intended PostgreSQL database before the first cron run.
-4. Add Cloudflare runtime secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, `RESEND_API_KEY`, and OAuth secrets if used.
+4. Add Cloudflare runtime secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `ASSET_CREDENTIAL_ENCRYPTION_KEY`, `CRON_SECRET`, `RESEND_API_KEY`, and OAuth secrets if used.
 5. Configure runtime non-secret vars such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, `RESEND_FROM_EMAIL`, and OAuth client IDs in `Settings > Variables and Secrets`.
 6. In the Cloudflare Git build settings, set:
    - Build command: `npm run build`

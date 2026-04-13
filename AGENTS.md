@@ -62,6 +62,7 @@ Required production variables:
 
 - `DATABASE_URL`
 - `AUTH_SECRET`
+- `ASSET_CREDENTIAL_ENCRYPTION_KEY`
 - `CRON_SECRET`
 - `APP_URL`
 - `NEXT_PUBLIC_APP_URL`
