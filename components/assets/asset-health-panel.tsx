@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AssetSourceRecord, AssetSyncLogRecord } from "@/lib/assets/types";
@@ -8,9 +9,11 @@ import { useI18n } from "@/lib/i18n";
 export function AssetHealthPanel({
   failedSources,
   syncLogs,
+  isLoading,
 }: {
   failedSources: AssetSourceRecord[];
   syncLogs: AssetSyncLogRecord[];
+  isLoading: boolean;
 }) {
   const { formatDate } = useI18n();
 
@@ -22,7 +25,12 @@ export function AssetHealthPanel({
           <CardDescription>Only sanitized error summaries are shown here.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {failedSources.length > 0 ? (
+          {isLoading ? (
+            <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading failed sources...
+            </p>
+          ) : failedSources.length > 0 ? (
             failedSources.map((source) => (
               <div key={source.id} className="rounded-lg border border-border/60 bg-background/50 p-4">
                 <div className="flex items-center gap-2">
@@ -43,7 +51,12 @@ export function AssetHealthPanel({
           <CardDescription>Latest sync attempts for this user.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {syncLogs.length > 0 ? (
+          {isLoading ? (
+            <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading sync logs...
+            </p>
+          ) : syncLogs.length > 0 ? (
             syncLogs.map((log) => (
               <div key={log.id} className="rounded-lg border border-border/60 bg-background/50 p-4">
                 <div className="flex items-center justify-between gap-3">

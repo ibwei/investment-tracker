@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -15,9 +16,11 @@ import { useI18n } from "@/lib/i18n";
 export function AssetBalanceTable({
   balances,
   positions,
+  isLoading,
 }: {
   balances: AssetBalanceRecord[];
   positions: AssetPositionRecord[];
+  isLoading: boolean;
 }) {
   const { formatDisplayCurrency, formatDate } = useI18n();
 
@@ -41,7 +44,16 @@ export function AssetBalanceTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {balances.length > 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading balances...
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ) : balances.length > 0 ? (
                 balances.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">
@@ -87,7 +99,16 @@ export function AssetBalanceTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {positions.length > 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading positions...
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ) : positions.length > 0 ? (
                 positions.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.protocolName || item.provider}</TableCell>

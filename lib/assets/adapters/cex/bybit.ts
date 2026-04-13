@@ -6,12 +6,15 @@ import { createStablePriceMap, fetchJson, sanitizeBaseUrl, toNumber } from "./co
 const PROVIDER = "Bybit";
 const DEFAULT_BASE_URL = "https://api.bybit.com";
 const WALLET_BALANCE_ENDPOINT = "/v5/account/wallet-balance";
+const ACCOUNT_COINS_BALANCE_ENDPOINT = "/v5/asset/transfer/query-account-coins-balance";
 const TICKERS_ENDPOINT = "/v5/market/tickers";
 const RECV_WINDOW = "5000";
 const ACCOUNT_TYPES = ["UNIFIED", "CONTRACT", "SPOT"];
+const CORE_TIMEOUT_MS = 8000;
 
 // Official docs:
 // https://bybit-exchange.github.io/docs/v5/account/wallet-balance
+// https://bybit-exchange.github.io/docs/v5/asset/balance/all-balance
 // https://bybit-exchange.github.io/docs/v5/guide
 
 type BybitResponse<T> = {
@@ -37,6 +40,15 @@ type BybitTickerResult = {
   list?: Array<{
     symbol: string;
     lastPrice: string;
+  }>;
+};
+
+type BybitCoinBalanceResult = {
+  accountType?: string;
+  balance?: Array<{
+    coin: string;
+    walletBalance?: string;
+    transferBalance?: string;
   }>;
 };
 
@@ -70,7 +82,8 @@ async function bybitFetch<T>(
   config: CexConfig,
   endpoint: string,
   query: URLSearchParams,
-  signed = false
+  signed = false,
+  options: { timeoutMs?: number } = {}
 ) {
   assertConfig(config);
 
@@ -94,7 +107,7 @@ async function bybitFetch<T>(
   const payload = await fetchJson<BybitResponse<T>>(
     PROVIDER,
     `${baseUrl}${endpoint}${queryString ? `?${queryString}` : ""}`,
-    { method: "GET", headers }
+    { method: "GET", headers, timeoutMs: options.timeoutMs }
   );
 
   if (payload.retCode !== 0) {
@@ -111,7 +124,9 @@ async function getUsdPriceMap(config: CexConfig) {
   const data = await bybitFetch<BybitTickerResult>(
     config,
     TICKERS_ENDPOINT,
-    new URLSearchParams({ category: "spot" })
+    new URLSearchParams({ category: "spot" }),
+    false,
+    { timeoutMs: CORE_TIMEOUT_MS }
   );
   const prices = createStablePriceMap();
 
@@ -136,7 +151,8 @@ async function getWalletBalance(config: CexConfig, accountType: string) {
       config,
       WALLET_BALANCE_ENDPOINT,
       new URLSearchParams({ accountType }),
-      true
+      true,
+      { timeoutMs: CORE_TIMEOUT_MS }
     );
   } catch (error) {
     if (error instanceof AssetProviderError && error.code === "UNKNOWN") {
@@ -155,7 +171,8 @@ async function testAnyWalletBalance(config: CexConfig) {
         config,
         WALLET_BALANCE_ENDPOINT,
         new URLSearchParams({ accountType }),
-        true
+        true,
+        { timeoutMs: CORE_TIMEOUT_MS }
       );
       return;
     } catch (error) {
@@ -171,7 +188,28 @@ async function testAnyWalletBalance(config: CexConfig) {
     : new AssetProviderError("Bybit wallet balance request failed.", "UNKNOWN");
 }
 
-function normalizeBalances(results: BybitWalletResult[], prices: Map<string, number>) {
+async function getFundingBalance(config: CexConfig) {
+  try {
+    return await bybitFetch<BybitCoinBalanceResult>(
+      config,
+      ACCOUNT_COINS_BALANCE_ENDPOINT,
+      new URLSearchParams({ accountType: "FUND" }),
+      true,
+      { timeoutMs: CORE_TIMEOUT_MS }
+    );
+  } catch (error) {
+    if (error instanceof AssetProviderError && error.code === "UNKNOWN") {
+      return { accountType: "FUND", balance: [] };
+    }
+    throw error;
+  }
+}
+
+function normalizeBalances(
+  results: BybitWalletResult[],
+  funding: BybitCoinBalanceResult,
+  prices: Map<string, number>
+) {
   const grouped = new Map<string, Array<Record<string, string | undefined>>>();
 
   for (const account of results.flatMap((result) => result.list ?? [])) {
@@ -195,6 +233,23 @@ function normalizeBalances(results: BybitWalletResult[], prices: Map<string, num
     }
   }
 
+  for (const coin of funding.balance ?? []) {
+    const amount = toNumber(coin.walletBalance);
+    if (amount <= 0) {
+      continue;
+    }
+
+    const assetSymbol = coin.coin.toUpperCase();
+    grouped.set(assetSymbol, [
+      ...(grouped.get(assetSymbol) ?? []),
+      {
+        accountType: funding.accountType || "FUND",
+        walletBalance: coin.walletBalance,
+        transferBalance: coin.transferBalance,
+      },
+    ]);
+  }
+
   return Array.from(grouped.entries()).map<NormalizedAssetBalance>(([assetSymbol, records]) => {
     const amount = records.reduce((sum, record) => sum + toNumber(record.walletBalance), 0);
     const price = prices.get(assetSymbol) ?? 0;
@@ -216,12 +271,13 @@ function normalizeBalances(results: BybitWalletResult[], prices: Map<string, num
 }
 
 async function getBalances(config: CexConfig) {
-  const [wallets, prices] = await Promise.all([
+  const [wallets, funding, prices] = await Promise.all([
     Promise.all(ACCOUNT_TYPES.map((accountType) => getWalletBalance(config, accountType))),
+    getFundingBalance(config),
     getUsdPriceMap(config),
   ]);
 
-  return normalizeBalances(wallets, prices);
+  return normalizeBalances(wallets, funding, prices);
 }
 
 export const bybitAdapter: CexAdapter = {

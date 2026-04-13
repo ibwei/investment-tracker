@@ -74,6 +74,10 @@ export function TopAssetsList({
   async function loadSourceDetail(source: SourceSummary, force = false) {
     const sourceKey = getSourceKey(source);
 
+    if (loadingSource === sourceKey) {
+      return;
+    }
+
     if (!force && expandedSource === sourceKey) {
       setExpandedSource(null);
       return;
@@ -156,6 +160,7 @@ export function TopAssetsList({
                 className="grid w-full grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 sm:grid-cols-[minmax(140px,1fr)_minmax(220px,1.4fr)_auto]"
                 onClick={() => void loadSourceDetail(source)}
                 aria-expanded={isExpanded}
+                disabled={isLoading}
               >
                 <span className="min-w-0">
                   <span className="flex items-center gap-2">
@@ -200,6 +205,7 @@ export function TopAssetsList({
                           variant="ghost"
                           size="sm"
                           loading={isLoading}
+                          disabled={isLoading}
                           onClick={() => {
                             setSourceDetails((current) => {
                               const next = { ...current };

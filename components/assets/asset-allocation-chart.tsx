@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/lib/i18n";
@@ -17,11 +18,13 @@ export function AssetAllocationChart({
   description,
   items,
   labelKey,
+  isLoading = false,
 }: {
   title: string;
   description: string;
   items: Array<Record<string, string | number>>;
   labelKey: string;
+  isLoading?: boolean;
 }) {
   const { formatDisplayCurrency } = useI18n();
 
@@ -32,24 +35,38 @@ export function AssetAllocationChart({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
-        <div className="h-[260px] min-h-0 min-w-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={items}
-                dataKey="valueUsd"
-                nameKey={labelKey}
-                innerRadius={60}
-                outerRadius={92}
-                paddingAngle={2}
-              >
-                {items.map((item, index) => (
-                  <Cell key={String(item[labelKey])} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value: number) => [formatDisplayCurrency(value), "Value"]} />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="relative h-[260px] min-h-0 min-w-0">
+          {items.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={items}
+                  dataKey="valueUsd"
+                  nameKey={labelKey}
+                  innerRadius={60}
+                  outerRadius={92}
+                  paddingAngle={2}
+                >
+                  {items.map((item, index) => (
+                    <Cell key={String(item[labelKey])} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number) => [formatDisplayCurrency(value), "Value"]} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border/70 text-sm text-muted-foreground">
+              No data yet.
+            </div>
+          )}
+          {isLoading ? (
+            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/55 backdrop-blur-[1px]">
+              <div className="flex items-center gap-2 rounded-md border border-border/70 bg-card px-3 py-2 text-sm text-muted-foreground shadow-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading chart...
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="space-y-3">
           {items.length > 0 ? (

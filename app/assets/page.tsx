@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, RefreshCcw } from "lucide-react";
+import { Loader2, Plus, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth-provider";
 import { AssetAllocationChart } from "@/components/assets/asset-allocation-chart";
@@ -79,6 +79,10 @@ export default function AssetsPage() {
   const [manualFormOpen, setManualFormOpen] = useState(false);
   const [editingManualAsset, setEditingManualAsset] = useState<ManualAssetRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [syncingSourceId, setSyncingSourceId] = useState<number | null>(null);
+  const [deletingSourceId, setDeletingSourceId] = useState<number | null>(null);
+  const [deletingManualAssetId, setDeletingManualAssetId] = useState<number | null>(null);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
 
   const tabs = [
     { key: "overview", label: "Overview" },
@@ -221,14 +225,18 @@ export default function AssetsPage() {
   const topAssets = useMemo(() => summary?.topAssets ?? [], [summary]);
 
   async function handleSaveSource(payload: Record<string, string>) {
+    if (isSubmitting) {
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const response = await requestJson<{ error?: string }>(
         editingSource ? `/api/assets/sources/${editingSource.id}` : "/api/assets/sources",
         {
-        method: editingSource ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+          method: editingSource ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         }
       );
       setSourceFormOpen(false);
@@ -246,6 +254,11 @@ export default function AssetsPage() {
   }
 
   async function handleSyncSource(sourceId: number) {
+    if (syncingSourceId !== null || deletingSourceId !== null || isSyncingAll) {
+      return;
+    }
+
+    setSyncingSourceId(sourceId);
     try {
       const response = await requestJson<{ error?: string }>(`/api/assets/sources/${sourceId}/sync`, {
         method: "POST",
@@ -257,20 +270,33 @@ export default function AssetsPage() {
       }
     } catch (error: any) {
       toast.error(error?.message ?? "Failed to sync source.");
+    } finally {
+      setSyncingSourceId(null);
     }
   }
 
   async function handleDeleteSource(sourceId: number) {
+    if (deletingSourceId !== null || syncingSourceId !== null || isSyncingAll) {
+      return;
+    }
+
+    setDeletingSourceId(sourceId);
     try {
       await requestJson(`/api/assets/sources/${sourceId}`, { method: "DELETE" });
       await refreshSummaryAndOpenTabs();
       toast.success("Source deleted.");
     } catch (error: any) {
       toast.error(error?.message ?? "Failed to delete source.");
+    } finally {
+      setDeletingSourceId(null);
     }
   }
 
   async function handleSaveManualAsset(payload: Record<string, string | number>) {
+    if (isSubmitting) {
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       if (editingManualAsset) {
@@ -298,16 +324,28 @@ export default function AssetsPage() {
   }
 
   async function handleDeleteManualAsset(assetId: number) {
+    if (deletingManualAssetId !== null) {
+      return;
+    }
+
+    setDeletingManualAssetId(assetId);
     try {
       await requestJson(`/api/assets/manual/${assetId}`, { method: "DELETE" });
       await refreshSummaryAndOpenTabs();
       toast.success("Manual asset deleted.");
     } catch (error: any) {
       toast.error(error?.message ?? "Failed to delete manual asset.");
+    } finally {
+      setDeletingManualAssetId(null);
     }
   }
 
   async function handleSyncAll() {
+    if (isSyncingAll || syncingSourceId !== null || deletingSourceId !== null) {
+      return;
+    }
+
+    setIsSyncingAll(true);
     try {
       const response = await requestJson<{ results?: unknown[] }>("/api/assets/sync", {
         method: "POST",
@@ -316,8 +354,12 @@ export default function AssetsPage() {
       toast.success(`Processed ${response.results?.length ?? 0} sources.`);
     } catch (error: any) {
       toast.error(error?.message ?? "Failed to sync all sources.");
+    } finally {
+      setIsSyncingAll(false);
     }
   }
+
+  const isSourceActionPending = syncingSourceId !== null || deletingSourceId !== null || isSyncingAll;
 
   return (
     <div className="min-h-screen bg-background">
@@ -335,16 +377,24 @@ export default function AssetsPage() {
             <Button
               variant="outline"
               onClick={handleSyncAll}
-              disabled={!isAuthenticated}
+              disabled={!isAuthenticated || isSourceActionPending}
+              loading={isSyncingAll}
             >
-              <RefreshCcw className="h-4 w-4" />
+              {isSyncingAll ? null : <RefreshCcw className="h-4 w-4" />}
               Sync All
             </Button>
-          <Button onClick={() => setSourceFormOpen(true)} disabled={!isAuthenticated}>
+            <Button
+              onClick={() => setSourceFormOpen(true)}
+              disabled={!isAuthenticated || isSubmitting || isSourceActionPending}
+            >
               <Plus className="h-4 w-4" />
               Add Source
             </Button>
-            <Button variant="outline" onClick={() => setManualFormOpen(true)} disabled={!isAuthenticated}>
+            <Button
+              variant="outline"
+              onClick={() => setManualFormOpen(true)}
+              disabled={!isAuthenticated || isSubmitting || deletingManualAssetId !== null}
+            >
               <Plus className="h-4 w-4" />
               Add Manual Asset
             </Button>
@@ -396,12 +446,14 @@ export default function AssetsPage() {
                   description="CEX, on-chain, and manual assets are kept distinct."
                   items={summary.sourceTypeBreakdown}
                   labelKey="type"
+                  isLoading={isPageLoading || isSyncingAll}
                 />
                 <AssetAllocationChart
                   title="By Category"
                   description="Current allocation by balance and position categories."
                   items={summary.categoryBreakdown}
                   labelKey="category"
+                  isLoading={isPageLoading || isSyncingAll}
                 />
               </div>
               <Card className="border-border/50 bg-card/50">
@@ -440,6 +492,9 @@ export default function AssetsPage() {
               onDelete={handleDeleteSource}
               isAuthenticated={isAuthenticated}
               isLoading={isDetailLoading}
+              syncingSourceId={syncingSourceId}
+              deletingSourceId={deletingSourceId}
+              isActionPending={isSourceActionPending}
             />
           ) : null}
 
@@ -452,19 +507,26 @@ export default function AssetsPage() {
               }}
               onDelete={handleDeleteManualAsset}
               isAuthenticated={isAuthenticated}
+              deletingAssetId={deletingManualAssetId}
+              isLoading={isDetailLoading}
             />
           ) : null}
 
           {activeTab === "balances" ? (
-            <AssetBalanceTable balances={balances} positions={positions} />
+            <AssetBalanceTable balances={balances} positions={positions} isLoading={isDetailLoading} />
           ) : null}
 
           {activeTab === "health" ? (
-            <AssetHealthPanel failedSources={health.failedSources} syncLogs={health.syncLogs} />
+            <AssetHealthPanel
+              failedSources={health.failedSources}
+              syncLogs={health.syncLogs}
+              isLoading={isDetailLoading}
+            />
           ) : null}
 
           {isPageLoading ? (
             <div className="rounded-lg border border-dashed border-border/70 px-4 py-10 text-center text-sm text-muted-foreground">
+              <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin" />
               Loading assets...
             </div>
           ) : null}

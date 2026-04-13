@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,11 +19,15 @@ export function ManualAssetList({
   onEdit,
   onDelete,
   isAuthenticated,
+  deletingAssetId,
+  isLoading,
 }: {
   assets: ManualAssetRecord[];
   onEdit: (asset: ManualAssetRecord) => void;
   onDelete: (assetId: number) => void;
   isAuthenticated: boolean;
+  deletingAssetId: number | null;
+  isLoading: boolean;
 }) {
   const { formatDisplayCurrency, formatDate } = useI18n();
 
@@ -47,39 +51,54 @@ export function ManualAssetList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {assets.length > 0 ? (
-              assets.map((asset) => (
-                <TableRow key={asset.id}>
-                  <TableCell className="font-medium">{asset.name}</TableCell>
-                  <TableCell>{asset.type}</TableCell>
-                  <TableCell>{asset.amount}</TableCell>
-                  <TableCell>{formatDisplayCurrency(asset.valueUsd)}</TableCell>
-                  <TableCell className="max-w-[240px] truncate">{asset.note || "-"}</TableCell>
-                  <TableCell>{formatDate(asset.updatedAt)}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onEdit(asset)}
-                        disabled={!isAuthenticated}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onDelete(asset.id)}
-                        disabled={!isAuthenticated}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading manual assets...
+                  </span>
+                </TableCell>
+              </TableRow>
+            ) : assets.length > 0 ? (
+              assets.map((asset) => {
+                const isDeleting = deletingAssetId === asset.id;
+                const isBusy = deletingAssetId !== null;
+
+                return (
+                  <TableRow key={asset.id}>
+                    <TableCell className="font-medium">{asset.name}</TableCell>
+                    <TableCell>{asset.type}</TableCell>
+                    <TableCell>{asset.amount}</TableCell>
+                    <TableCell>{formatDisplayCurrency(asset.valueUsd)}</TableCell>
+                    <TableCell className="max-w-[240px] truncate">{asset.note || "-"}</TableCell>
+                    <TableCell>{formatDate(asset.updatedAt)}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onEdit(asset)}
+                          disabled={!isAuthenticated || isBusy}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onDelete(asset.id)}
+                          disabled={!isAuthenticated || isBusy}
+                          loading={isDeleting}
+                        >
+                          {isDeleting ? null : <Trash2 className="h-4 w-4" />}
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
