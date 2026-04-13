@@ -28,6 +28,9 @@
       "0 14 * * *"
     ]
   },
+  "placement": {
+    "region": "aws:ap-northeast-1"
+  },
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,
@@ -38,7 +41,7 @@
       "invocation_logs": true
     },
     "traces": {
-      "enabled": false,
+      "enabled": true,
       "persist": true,
       "head_sampling_rate": 1
     }
