@@ -16,7 +16,8 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "0d43742ce0174b95bfc66fdf2d6b9648"
+      "id": "0d43742ce0174b95bfc66fdf2d6b9648",
+      "localConnectionString": "postgres://user:password@localhost:5432/postgres"
     }
   ],
   "triggers": {
