@@ -62,12 +62,34 @@ function getPool() {
   return globalForPool.__earnCompassPgPool;
 }
 
+function isTransientConnectionError(error: unknown) {
+  const code = (error as { code?: string })?.code;
+  const message = String((error as { message?: string })?.message ?? "");
+
+  return (
+    code === "ECONNRESET" ||
+    code === "ECONNREFUSED" ||
+    code === "ETIMEDOUT" ||
+    message.includes("Connection terminated unexpectedly") ||
+    message.includes("Client has encountered a connection error")
+  );
+}
+
 export async function query<T = Record<string, unknown>>(
   text: string,
   params: QueryParams = []
 ) {
-  const result = await getPool().query<T>(text, [...params]);
-  return result.rows;
+  try {
+    const result = await getPool().query<T>(text, [...params]);
+    return result.rows;
+  } catch (error) {
+    if (!isTransientConnectionError(error)) {
+      throw error;
+    }
+
+    const result = await getPool().query<T>(text, [...params]);
+    return result.rows;
+  }
 }
 
 export async function queryOne<T = Record<string, unknown>>(
@@ -79,7 +101,15 @@ export async function queryOne<T = Record<string, unknown>>(
 }
 
 export async function execute(text: string, params: QueryParams = []) {
-  return await getPool().query(text, [...params]);
+  try {
+    return await getPool().query(text, [...params]);
+  } catch (error) {
+    if (!isTransientConnectionError(error)) {
+      throw error;
+    }
+
+    return await getPool().query(text, [...params]);
+  }
 }
 
 export async function withTransaction<T>(

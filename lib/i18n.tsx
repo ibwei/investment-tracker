@@ -90,6 +90,7 @@ const translations = {
     },
     nav: {
       dashboard: 'Dashboard',
+      assets: 'Assets',
       analytics: 'Analytics',
       settings: 'Settings',
       login: 'Log in',
@@ -394,6 +395,7 @@ const translations = {
     },
     nav: {
       dashboard: '仪表盘',
+      assets: '资产',
       analytics: '分析',
       settings: '设置',
       login: '登录',

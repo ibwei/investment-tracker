@@ -9,6 +9,7 @@ import {
   BarChart3, 
   Settings, 
   Compass,
+  Wallet,
   Menu,
   LogOut,
   X
@@ -35,6 +36,7 @@ export function Navbar() {
 
   const navItems = [
     { href: '/', label: t('nav.dashboard'), icon: LayoutDashboard },
+    { href: '/assets', label: t('nav.assets'), icon: Wallet },
     { href: '/analytics', label: t('nav.analytics'), icon: BarChart3 },
     { href: '/settings', label: t('nav.settings'), icon: Settings },
   ]

@@ -273,7 +273,7 @@ export async function sendExpiringInvestmentReminders(referenceDate = new Date()
   const now = toDate(referenceDate) || new Date();
   const windowEnd = new Date(now.getTime() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000);
 
-  const candidates = await query(
+  const expiringCandidates = await query(
     `
       select
         investments.id,
@@ -296,19 +296,64 @@ export async function sendExpiringInvestmentReminders(referenceDate = new Date()
       where investments.is_deleted = false
         and investments.status = 'ONGOING'
         and users.status = 'ACTIVE'
+        and investments.end_time is not null
+        and investments.end_time::timestamptz > $1::timestamptz
+        and investments.end_time::timestamptz <= $2::timestamptz
       order by investments.id asc
-    `
+    `,
+    [now.toISOString(), windowEnd.toISOString()]
   );
 
-  const groups = groupInvestmentsByUser(candidates);
+  const expiringGroups = groupInvestmentsByUser(expiringCandidates);
+
+  if (expiringGroups.length === 0) {
+    return {
+      checkedCount: 0,
+      activeCount: 0,
+      expiringCount: 0,
+      emailedUserCount: 0,
+      deliveries: []
+    };
+  }
+
+  const expiringUserIds = expiringGroups.map((group) => group.user.id);
+  const activeInvestments = await query(
+    `
+      select
+        investments.id,
+        investments.project,
+        investments.asset_name as "assetName",
+        investments.type,
+        investments.amount,
+        investments.currency,
+        investments.apr_expected as "aprExpected",
+        investments.end_time as "endTime",
+        investments.remark,
+        json_build_object(
+          'id', users.id,
+          'email', users.email,
+          'name', users.name,
+          'timezone', users.timezone
+        ) as "user"
+      from investments
+      join users on users.id = investments.user_id
+      where investments.is_deleted = false
+        and investments.status = 'ONGOING'
+        and users.status = 'ACTIVE'
+        and users.id = any($1::int[])
+      order by investments.id asc
+    `,
+    [expiringUserIds]
+  );
+
+  const groups = groupInvestmentsByUser(activeInvestments);
   const deliveries = [];
-  let expiringCount = 0;
+  let expiringCount = expiringCandidates.length;
 
   for (const group of groups) {
     const {
       expiringInvestments
     } = splitInvestmentsByExpiryWindow(group.investments, now, windowEnd);
-    expiringCount += expiringInvestments.length;
 
     const subject = `投资到期提醒：${group.investments.length} 笔活跃投资，${expiringInvestments.length} 笔将在 24 小时内到期`;
     const payload = {
@@ -334,8 +379,8 @@ export async function sendExpiringInvestmentReminders(referenceDate = new Date()
   }
 
   return {
-    checkedCount: candidates.length,
-    activeCount: candidates.length,
+    checkedCount: expiringCandidates.length,
+    activeCount: activeInvestments.length,
     expiringCount,
     emailedUserCount: deliveries.length,
     deliveries

@@ -2,6 +2,7 @@ import nextWorker from "./.open-next/worker.js";
 
 const CRON_PATHS = {
   "0 */12 * * *": "/api/cron/snapshots",
+  "0 */4 * * *": "/api/cron/assets/sync",
   "0 2 * * *": "/api/cron/investments/expiry-reminders",
   "0 14 * * *": "/api/cron/investments/expiry-reminders"
 };
@@ -23,8 +24,17 @@ export default {
       }
     });
 
-    ctx.waitUntil(
-      nextWorker.fetch(request, env, ctx)
-    );
+    ctx.waitUntil((async () => {
+      try {
+        const response = await nextWorker.fetch(request, env, ctx);
+        if (!response.ok) {
+          console.error(
+            `Scheduled job ${controller.cron} failed with ${response.status}: ${await response.text()}`
+          );
+        }
+      } catch (error) {
+        console.error(`Scheduled job ${controller.cron} failed.`, error);
+      }
+    })());
   }
 };
