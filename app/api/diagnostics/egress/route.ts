@@ -23,6 +23,10 @@ const TARGETS: Record<
     label: "Bybit",
     url: "https://api.bybit.com/v5/market/time",
   },
+  bitget: {
+    label: "Bitget",
+    url: "https://api.bitget.com/api/v2/spot/market/tickers",
+  },
   gate: {
     label: "Gate",
     url: "https://api.gateio.ws/api/v4/spot/time",
