@@ -1,18 +1,16 @@
 import pg from "pg";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-const { Pool } = pg;
+const { Client } = pg;
 
-type QueryClient = pg.PoolClient;
+type QueryClient = pg.Client;
 type QueryParams = readonly unknown[];
-type GlobalWithPgPool = typeof globalThis & {
-  __earnCompassPgPool?: pg.Pool;
-  __earnCompassPgPoolConnectionString?: string;
-};
 
 type HyperdriveBinding = {
   connectionString?: string;
 };
+
+const LOCAL_HYPERDRIVE_PLACEHOLDER = "postgres://user:password@localhost:5432/postgres";
 
 type DatabaseConnectionConfig = {
   connectionString: string;
@@ -22,7 +20,9 @@ type DatabaseConnectionConfig = {
 function getHyperdriveConnectionString() {
   try {
     const { env } = getCloudflareContext();
-    return (env as { HYPERDRIVE?: HyperdriveBinding }).HYPERDRIVE?.connectionString || "";
+    const connectionString =
+      (env as { HYPERDRIVE?: HyperdriveBinding }).HYPERDRIVE?.connectionString || "";
+    return connectionString === LOCAL_HYPERDRIVE_PLACEHOLDER ? "" : connectionString;
   } catch {
     return "";
   }
@@ -58,37 +58,14 @@ function shouldUseSsl(connectionString: string) {
   return !["localhost", "127.0.0.1", "::1"].includes(url.hostname);
 }
 
-function createPool() {
+function createClient() {
   const connectionConfig = getConnectionConfig();
 
-  const pool = new Pool({
+  return new Client({
     connectionString: connectionConfig.connectionString,
     connectionTimeoutMillis: 5_000,
-    idleTimeoutMillis: 10_000,
-    max: 2,
     ssl: connectionConfig.ssl
   });
-
-  pool.on("error", (error) => {
-    console.error("Unexpected idle PostgreSQL client error", error);
-  });
-
-  return pool;
-}
-
-function getPool() {
-  const globalForPool = globalThis as GlobalWithPgPool;
-  const connectionString = getConnectionConfig().connectionString;
-
-  if (
-    !globalForPool.__earnCompassPgPool ||
-    globalForPool.__earnCompassPgPoolConnectionString !== connectionString
-  ) {
-    globalForPool.__earnCompassPgPool = createPool();
-    globalForPool.__earnCompassPgPoolConnectionString = connectionString;
-  }
-
-  return globalForPool.__earnCompassPgPool;
 }
 
 function isTransientConnectionError(error: unknown) {
@@ -108,16 +85,27 @@ export async function query<T = Record<string, unknown>>(
   text: string,
   params: QueryParams = []
 ) {
+  const client = createClient();
+
   try {
-    const result = await getPool().query<T>(text, [...params]);
+    await client.connect();
+    const result = await client.query<T>(text, [...params]);
     return result.rows;
   } catch (error) {
     if (!isTransientConnectionError(error)) {
       throw error;
     }
 
-    const result = await getPool().query<T>(text, [...params]);
-    return result.rows;
+    const retryClient = createClient();
+    try {
+      await retryClient.connect();
+      const result = await retryClient.query<T>(text, [...params]);
+      return result.rows;
+    } finally {
+      await retryClient.end().catch(() => undefined);
+    }
+  } finally {
+    await client.end().catch(() => undefined);
   }
 }
 
@@ -130,31 +118,43 @@ export async function queryOne<T = Record<string, unknown>>(
 }
 
 export async function execute(text: string, params: QueryParams = []) {
+  const client = createClient();
+
   try {
-    return await getPool().query(text, [...params]);
+    await client.connect();
+    return await client.query(text, [...params]);
   } catch (error) {
     if (!isTransientConnectionError(error)) {
       throw error;
     }
 
-    return await getPool().query(text, [...params]);
+    const retryClient = createClient();
+    try {
+      await retryClient.connect();
+      return await retryClient.query(text, [...params]);
+    } finally {
+      await retryClient.end().catch(() => undefined);
+    }
+  } finally {
+    await client.end().catch(() => undefined);
   }
 }
 
 export async function withTransaction<T>(
   callback: (client: QueryClient) => Promise<T>
 ) {
-  const client = await getPool().connect();
+  const client = createClient();
 
   try {
+    await client.connect();
     await client.query("BEGIN");
     const result = await callback(client);
     await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => undefined);
     throw error;
   } finally {
-    client.release();
+    await client.end().catch(() => undefined);
   }
 }
