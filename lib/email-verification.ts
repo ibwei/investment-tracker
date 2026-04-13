@@ -1,7 +1,7 @@
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 
 import { sendEmail } from "@/lib/email";
-import { queryOne, withTransaction } from "@/lib/db";
+import { execute, queryOne, withTransaction } from "@/lib/db";
 
 const PURPOSE_REGISTER = "REGISTER";
 const CODE_TTL_MINUTES = 10;
@@ -91,34 +91,44 @@ export async function sendRegistrationVerificationCode(input) {
   const timestamp = now();
   const expiresAt = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000).toISOString();
 
-  await withTransaction(async (client) => {
-    await client.query(
+  await execute(
+    `
+      update email_verification_codes
+      set consumed_at = $3
+      where email = $1 and purpose = $2 and consumed_at is null
+    `,
+    [email, PURPOSE_REGISTER, timestamp]
+  );
+
+  await execute(
+    `
+      insert into email_verification_codes (
+        email, code_hash, purpose, expires_at, created_at
+      )
+      values ($1, $2, $3, $4, $5)
+    `,
+    [email, hashCode(email, code), PURPOSE_REGISTER, expiresAt, timestamp]
+  );
+
+  const message = buildVerificationEmail(code);
+  try {
+    await sendEmail({
+      to: email,
+      subject: message.subject,
+      html: message.html,
+      text: message.text
+    });
+  } catch (error) {
+    await execute(
       `
         update email_verification_codes
         set consumed_at = $3
-        where email = $1 and purpose = $2 and consumed_at is null
+        where email = $1 and purpose = $2 and code_hash = $4 and consumed_at is null
       `,
-      [email, PURPOSE_REGISTER, timestamp]
-    );
-
-    await client.query(
-      `
-        insert into email_verification_codes (
-          email, code_hash, purpose, expires_at, created_at
-        )
-        values ($1, $2, $3, $4, $5)
-      `,
-      [email, hashCode(email, code), PURPOSE_REGISTER, expiresAt, timestamp]
-    );
-  });
-
-  const message = buildVerificationEmail(code);
-  await sendEmail({
-    to: email,
-    subject: message.subject,
-    html: message.html,
-    text: message.text
-  });
+      [email, PURPOSE_REGISTER, now(), hashCode(email, code)]
+    ).catch(() => undefined);
+    throw error;
+  }
 
   return {
     ok: true,
@@ -126,13 +136,13 @@ export async function sendRegistrationVerificationCode(input) {
   };
 }
 
-export async function consumeRegistrationVerificationCode(emailInput, codeInput) {
+export async function consumeRegistrationVerificationCode(emailInput, codeInput, transactionClient = null) {
   const email = normalizeVerificationEmail(emailInput);
   const code = normalizeText(codeInput);
 
   assert(/^\d{6}$/.test(code), "Verification code is invalid.");
 
-  return withTransaction(async (client) => {
+  async function consumeWithClient(client) {
     const result = await client.query(
       `
         select id, code_hash as "codeHash", expires_at as "expiresAt"
@@ -159,5 +169,11 @@ export async function consumeRegistrationVerificationCode(emailInput, codeInput)
     );
 
     return true;
-  });
+  }
+
+  if (transactionClient) {
+    return consumeWithClient(transactionClient);
+  }
+
+  return withTransaction(consumeWithClient, { retryTransient: true });
 }

@@ -17,6 +17,19 @@ type DatabaseConnectionConfig = {
   ssl?: { rejectUnauthorized: false };
 };
 
+const MAX_DB_ATTEMPTS = 3;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createDatabaseUnavailableError(cause: unknown) {
+  const error = new Error("Temporary database connection issue. Please try again.");
+  (error as { status?: number; cause?: unknown }).status = 503;
+  (error as { status?: number; cause?: unknown }).cause = cause;
+  return error;
+}
+
 function getHyperdriveConnectionString() {
   try {
     const { env } = getCloudflareContext();
@@ -68,7 +81,7 @@ function createClient() {
   });
 }
 
-function isTransientConnectionError(error: unknown) {
+export function isTransientConnectionError(error: unknown) {
   const code = (error as { code?: string })?.code;
   const message = String((error as { message?: string })?.message ?? "");
 
@@ -81,32 +94,45 @@ function isTransientConnectionError(error: unknown) {
   );
 }
 
+async function withDatabaseRetry<T>(operation: () => Promise<T>) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < MAX_DB_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (!isTransientConnectionError(error) || attempt === MAX_DB_ATTEMPTS - 1) {
+        break;
+      }
+
+      await sleep(100 * (attempt + 1));
+    }
+  }
+
+  if (isTransientConnectionError(lastError)) {
+    throw createDatabaseUnavailableError(lastError);
+  }
+
+  throw lastError;
+}
+
 export async function query<T = Record<string, unknown>>(
   text: string,
   params: QueryParams = []
 ) {
-  const client = createClient();
+  return withDatabaseRetry(async () => {
+    const client = createClient();
 
-  try {
-    await client.connect();
-    const result = await client.query<T>(text, [...params]);
-    return result.rows;
-  } catch (error) {
-    if (!isTransientConnectionError(error)) {
-      throw error;
-    }
-
-    const retryClient = createClient();
     try {
-      await retryClient.connect();
-      const result = await retryClient.query<T>(text, [...params]);
+      await client.connect();
+      const result = await client.query<T>(text, [...params]);
       return result.rows;
     } finally {
-      await retryClient.end().catch(() => undefined);
+      await client.end().catch(() => undefined);
     }
-  } finally {
-    await client.end().catch(() => undefined);
-  }
+  });
 }
 
 export async function queryOne<T = Record<string, unknown>>(
@@ -118,43 +144,57 @@ export async function queryOne<T = Record<string, unknown>>(
 }
 
 export async function execute(text: string, params: QueryParams = []) {
-  const client = createClient();
+  return withDatabaseRetry(async () => {
+    const client = createClient();
 
-  try {
-    await client.connect();
-    return await client.query(text, [...params]);
-  } catch (error) {
-    if (!isTransientConnectionError(error)) {
-      throw error;
-    }
-
-    const retryClient = createClient();
     try {
-      await retryClient.connect();
-      return await retryClient.query(text, [...params]);
+      await client.connect();
+      return await client.query(text, [...params]);
     } finally {
-      await retryClient.end().catch(() => undefined);
+      await client.end().catch(() => undefined);
     }
-  } finally {
-    await client.end().catch(() => undefined);
-  }
+  });
 }
 
 export async function withTransaction<T>(
-  callback: (client: QueryClient) => Promise<T>
+  callback: (client: QueryClient) => Promise<T>,
+  options: { retryTransient?: boolean } = {}
 ) {
-  const client = createClient();
+  const maxAttempts = options.retryTransient ? MAX_DB_ATTEMPTS : 1;
+  let lastError: unknown;
 
-  try {
-    await client.connect();
-    await client.query("BEGIN");
-    const result = await callback(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
-  } finally {
-    await client.end().catch(() => undefined);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const client = createClient();
+    let didBegin = false;
+
+    try {
+      await client.connect();
+      await client.query("BEGIN");
+      didBegin = true;
+      const result = await callback(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      lastError = error;
+
+      if (didBegin) {
+        await client.query("ROLLBACK").catch(() => undefined);
+      }
+
+      if (isTransientConnectionError(error) && attempt < maxAttempts - 1) {
+        await sleep(100 * (attempt + 1));
+        continue;
+      }
+
+      if (isTransientConnectionError(error)) {
+        throw createDatabaseUnavailableError(error);
+      }
+
+      throw error;
+    } finally {
+      await client.end().catch(() => undefined);
+    }
   }
+
+  throw createDatabaseUnavailableError(lastError);
 }

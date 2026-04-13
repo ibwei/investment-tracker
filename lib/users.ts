@@ -131,25 +131,30 @@ export async function registerUser(input) {
   const email = normalizeEmail(input.email);
   const password = normalizePassword(input.password);
   const name = normalizeText(input.name) || null;
-
-  const existingUser = await queryOne(`select id from users where email = $1 limit 1`, [
-    email
-  ]);
-
-  assert(!existingUser, "An account with this email already exists.", 409);
-  await consumeRegistrationVerificationCode(email, input.verificationCode);
-
   const timestamp = now();
-  const user = await queryOne(
-    `
-      insert into users (
-        email, password_hash, name, role, status, storage_mode, timezone, created_at, updated_at
-      )
-      values ($1, $2, $3, 'USER', 'ACTIVE', 'REMOTE', $4, $5, $5)
-      returning ${USER_FIELDS}
-    `,
-    [email, hashPassword(password), name, DEFAULT_APP_TIMEZONE, timestamp]
-  ).catch((error) => {
+  const passwordHash = hashPassword(password);
+
+  const user = await withTransaction(async (client) => {
+    const existingUser = await client.query(`select id from users where email = $1 limit 1`, [
+      email
+    ]);
+
+    assert(!existingUser.rows[0], "An account with this email already exists.", 409);
+    await consumeRegistrationVerificationCode(email, input.verificationCode, client);
+
+    const created = await client.query(
+      `
+        insert into users (
+          email, password_hash, name, role, status, storage_mode, timezone, created_at, updated_at
+        )
+        values ($1, $2, $3, 'USER', 'ACTIVE', 'REMOTE', $4, $5, $5)
+        returning ${USER_FIELDS}
+      `,
+      [email, passwordHash, name, DEFAULT_APP_TIMEZONE, timestamp]
+    );
+
+    return created.rows[0];
+  }, { retryTransient: true }).catch((error) => {
     if (isUniqueViolation(error)) {
       assert(false, "An account with this email already exists.", 409);
     }
