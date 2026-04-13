@@ -1,4 +1,5 @@
 import pg from "pg";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 const { Pool } = pg;
 
@@ -9,14 +10,42 @@ type GlobalWithPgPool = typeof globalThis & {
   __earnCompassPgPoolConnectionString?: string;
 };
 
-function getConnectionString() {
+type HyperdriveBinding = {
+  connectionString?: string;
+};
+
+type DatabaseConnectionConfig = {
+  connectionString: string;
+  ssl?: { rejectUnauthorized: false };
+};
+
+function getHyperdriveConnectionString() {
+  try {
+    const { env } = getCloudflareContext();
+    return (env as { HYPERDRIVE?: HyperdriveBinding }).HYPERDRIVE?.connectionString || "";
+  } catch {
+    return "";
+  }
+}
+
+function getConnectionConfig(): DatabaseConnectionConfig {
+  const hyperdriveConnectionString = getHyperdriveConnectionString();
+  if (hyperdriveConnectionString) {
+    return {
+      connectionString: hyperdriveConnectionString
+    };
+  }
+
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
-    throw new Error("DATABASE_URL is required before accessing the database.");
+    throw new Error("HYPERDRIVE binding or DATABASE_URL is required before accessing the database.");
   }
 
-  return connectionString;
+  return {
+    connectionString,
+    ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined
+  };
 }
 
 function shouldUseSsl(connectionString: string) {
@@ -30,14 +59,14 @@ function shouldUseSsl(connectionString: string) {
 }
 
 function createPool() {
-  const connectionString = getConnectionString();
+  const connectionConfig = getConnectionConfig();
 
   const pool = new Pool({
-    connectionString,
-    connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 30_000,
-    max: 5,
-    ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined
+    connectionString: connectionConfig.connectionString,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 10_000,
+    max: 2,
+    ssl: connectionConfig.ssl
   });
 
   pool.on("error", (error) => {
@@ -49,7 +78,7 @@ function createPool() {
 
 function getPool() {
   const globalForPool = globalThis as GlobalWithPgPool;
-  const connectionString = getConnectionString();
+  const connectionString = getConnectionConfig().connectionString;
 
   if (
     !globalForPool.__earnCompassPgPool ||

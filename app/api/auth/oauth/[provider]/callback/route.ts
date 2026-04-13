@@ -8,6 +8,9 @@ import {
 } from "@/lib/oauth";
 import { findOrCreateOAuthUser } from "@/lib/users";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET(request, context) {
   const provider = String((await context.params)?.provider || "").toLowerCase();
   const { searchParams } = new URL(request.url);

@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getUserById, updateUserProfile } from "@/lib/users";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 function handleRouteError(error) {
   const status = error?.status ?? 500;
   return NextResponse.json(

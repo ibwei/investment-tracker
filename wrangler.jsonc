@@ -13,6 +13,12 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "0d43742ce0174b95bfc66fdf2d6b9648"
+    }
+  ],
   "triggers": {
     "crons": [
       "0 */12 * * *",
