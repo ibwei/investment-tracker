@@ -138,7 +138,7 @@ export default function SettingsPage() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          ...profile,
+          name: profile.name,
           timezone
         })
       });
@@ -245,13 +245,10 @@ export default function SettingsPage() {
                     type="email"
                     placeholder={t("settings.emailPlaceholder")}
                     value={profile.email}
-                    onChange={(event) =>
-                      setProfile((current) => ({
-                        ...current,
-                        email: event.target.value
-                      }))
-                    }
+                    disabled
+                    readOnly
                   />
+                  <p className="text-xs text-muted-foreground">{t("settings.emailLockedDescription")}</p>
                 </div>
               </div>
             </CardContent>

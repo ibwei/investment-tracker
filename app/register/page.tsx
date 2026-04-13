@@ -36,6 +36,7 @@ function createRegisterSchema(t) {
     .object({
       name: z.string().min(2, t("validation.nameMin")),
       email: z.string().email(t("validation.validEmail")),
+      verificationCode: z.string().regex(/^\d{6}$/, t("validation.verificationCode")),
       password: z.string().min(8, t("validation.passwordMin")),
       confirmPassword: z.string()
     })
@@ -49,6 +50,8 @@ export default function RegisterPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [codeCooldown, setCodeCooldown] = useState(0);
   const [oauthProviders, setOauthProviders] = useState({
     google: false,
     github: false
@@ -68,12 +71,25 @@ export default function RegisterPage() {
     defaultValues: {
       name: "",
       email: "",
+      verificationCode: "",
       password: "",
       confirmPassword: ""
     }
   });
 
   const password = form.watch("password");
+
+  useEffect(() => {
+    if (codeCooldown <= 0) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCodeCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [codeCooldown]);
 
   useEffect(() => {
     const oauthError = new URLSearchParams(window.location.search).get("oauth_error");
@@ -130,6 +146,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           name: data.name,
           email: data.email,
+          verificationCode: data.verificationCode,
           password: data.password
         })
       });
@@ -147,6 +164,40 @@ export default function RegisterPage() {
       toast.error(localizeErrorMessage(error.message));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendVerificationCode = async () => {
+    const isEmailValid = await form.trigger("email");
+
+    if (!isEmailValid || isSendingCode || codeCooldown > 0) {
+      return;
+    }
+
+    setIsSendingCode(true);
+
+    try {
+      const response = await fetch("/api/auth/email-verification", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: form.getValues("email")
+        })
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || t("auth.sendVerificationCodeFailed"));
+      }
+
+      setCodeCooldown(60);
+      toast.success(t("auth.verificationCodeSent"));
+    } catch (error) {
+      toast.error(localizeErrorMessage(error.message));
+    } finally {
+      setIsSendingCode(false);
     }
   };
 
@@ -194,7 +245,45 @@ export default function RegisterPage() {
                     <FormItem>
                       <FormLabel>{t("common.email")}</FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder={t("auth.emailPlaceholder")} {...field} />
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Input
+                            type="email"
+                            placeholder={t("auth.emailPlaceholder")}
+                            className="min-w-0"
+                            {...field}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full shrink-0 sm:w-auto"
+                            loading={isSendingCode}
+                            disabled={isLoading || isSendingCode || codeCooldown > 0}
+                            onClick={handleSendVerificationCode}
+                          >
+                            {codeCooldown > 0
+                              ? t("auth.resendVerificationCodeIn").replace("{seconds}", String(codeCooldown))
+                              : t("auth.sendVerificationCode")}
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="verificationCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("auth.verificationCode")}</FormLabel>
+                      <FormControl>
+                        <Input
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder={t("auth.verificationCodePlaceholder")}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

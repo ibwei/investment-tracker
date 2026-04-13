@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { query, queryOne, withTransaction } from "@/lib/db";
+import { consumeRegistrationVerificationCode } from "@/lib/email-verification";
 import { DEFAULT_APP_TIMEZONE, resolveAppTimeZone } from "@/lib/time";
 
 function assert(condition, message, status = 400) {
@@ -136,6 +137,7 @@ export async function registerUser(input) {
   ]);
 
   assert(!existingUser, "An account with this email already exists.", 409);
+  await consumeRegistrationVerificationCode(email, input.verificationCode);
 
   const timestamp = now();
   const user = await queryOne(
@@ -184,26 +186,21 @@ export async function updateUserProfile(userId, input) {
 
   assert(current, "User not found.", 404);
 
-  const email = normalizeEmail(input.email ?? current.email);
+  if (input.email !== undefined && normalizeEmail(input.email) !== current.email) {
+    assert(false, "Email cannot be changed.", 400);
+  }
+
   const name = normalizeText(input.name ?? current.name) || null;
   const timezone = normalizeTimeZone(input.timezone ?? current.timezone);
-
-  if (email !== current.email) {
-    const existingUser = await queryOne(`select id from users where email = $1 limit 1`, [
-      email
-    ]);
-
-    assert(!existingUser || existingUser.id === current.id, "Email is already in use.", 409);
-  }
 
   const user = await queryOne(
     `
       update users
-      set email = $1, name = $2, timezone = $3, updated_at = $4
-      where id = $5
+      set name = $1, timezone = $2, updated_at = $3
+      where id = $4
       returning ${USER_FIELDS}
     `,
-    [email, name, timezone, now(), current.id]
+    [name, timezone, now(), current.id]
   );
 
   return mapUser(user);
@@ -249,12 +246,11 @@ export async function findOrCreateOAuthUser(input) {
       const updated = await client.query(
         `
           update users
-          set email = $1, name = $2, timezone = $3, updated_at = $4
-          where id = $5
+          set name = $1, timezone = $2, updated_at = $3
+          where id = $4
           returning ${USER_FIELDS}
         `,
         [
-          email,
           name ?? existingAccount.user.name,
           normalizeTimeZone(existingAccount.user.timezone),
           timestamp,
