@@ -6,43 +6,45 @@ import type { AssetSummaryResponse } from "@/lib/assets/types";
 import { useI18n } from "@/lib/i18n";
 
 export function AssetSummaryCards({ summary }: { summary: AssetSummaryResponse["summary"] }) {
-  const { formatDisplayCurrency, formatDate } = useI18n();
+  const { formatDisplayCurrency, formatDate, t } = useI18n();
+  const changeValue =
+    summary.changePercent >= 0 ? `+${summary.changePercent.toFixed(2)}` : summary.changePercent.toFixed(2);
 
   const cards = [
     {
-      title: "Total Assets",
+      title: t("assets.summary.total"),
       value: formatDisplayCurrency(summary.totalValueUsd),
-      description: summary.snapshotDate ? formatDate(summary.snapshotDate) : "No snapshot yet",
+      description: summary.snapshotDate ? formatDate(summary.snapshotDate) : t("assets.summary.noSnapshot"),
       icon: Wallet,
     },
     {
-      title: "24h Change",
+      title: t("assets.summary.change"),
       value: formatDisplayCurrency(summary.changeUsd),
-      description: `${summary.changePercent >= 0 ? "+" : ""}${summary.changePercent.toFixed(2)}%`,
+      description: t("assets.summary.changePercent", { value: changeValue }),
       icon: TrendingUp,
     },
     {
-      title: "Sources",
+      title: t("assets.summary.sources"),
       value: String(summary.sourceCount),
-      description: "Connected asset sources",
+      description: t("assets.summary.sourcesDescription"),
       icon: Database,
     },
     {
-      title: "Manual Assets",
+      title: t("assets.summary.manual"),
       value: String(summary.manualAssetCount),
-      description: "Included in net worth",
+      description: t("assets.summary.manualDescription"),
       icon: Wrench,
     },
     {
-      title: "Failed Sources",
+      title: t("assets.summary.failed"),
       value: String(summary.failedSourceCount),
-      description: "Need review",
+      description: t("assets.summary.failedDescription"),
       icon: AlertCircle,
     },
     {
-      title: "Last Sync",
-      value: summary.lastSyncedAt ? formatDate(summary.lastSyncedAt) : "Never",
-      description: "Latest successful attempt",
+      title: t("assets.summary.lastSync"),
+      value: summary.lastSyncedAt ? formatDate(summary.lastSyncedAt) : t("assets.summary.never"),
+      description: t("assets.summary.lastSyncDescription"),
       icon: RefreshCcw,
     },
   ];

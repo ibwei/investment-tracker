@@ -288,6 +288,8 @@ Then verify the changed route or page in the browser. If checks cannot be run be
 - Keep edits scoped to the requested behavior.
 - Do not commit, push, deploy, or modify production data unless explicitly asked.
 - Do not add secrets to the repository.
+- Every time code is changed, check whether any third-party environment variables added or changed in `.env.example` use semantic placeholder values only. Placeholders such as `your-okx-web3-api-secret` are allowed; real secrets copied from `.env` or another local secret source are strictly forbidden.
+- When `.env` exists, compare relevant `.env.example` values against `.env` values before finishing code changes. Do not print real secret values. If `.env.example` contains a real third-party key, token, secret, passphrase, webhook secret, or project credential, stop immediately, tell the user which variable name is affected, and do not continue further work until the leak is removed.
 - Do not edit generated or dependency directories such as `node_modules` or `.next`.
 - Do not assume old references to SQLite, NextAuth, TradingView, or Ant Design-first UI are current; the code and current docs supersede older plans.
 

@@ -26,7 +26,7 @@ export function AssetAllocationChart({
   labelKey: string;
   isLoading?: boolean;
 }) {
-  const { formatDisplayCurrency } = useI18n();
+  const { formatDisplayCurrency, t } = useI18n();
 
   return (
     <Card className="border-border/50 bg-card/50">
@@ -51,19 +51,21 @@ export function AssetAllocationChart({
                     <Cell key={String(item[labelKey])} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => [formatDisplayCurrency(value), "Value"]} />
+                <Tooltip
+                  formatter={(value: number) => [formatDisplayCurrency(value), t("assets.allocation.valueLabel")]}
+                />
               </PieChart>
             </ResponsiveContainer>
           ) : (
             <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border/70 text-sm text-muted-foreground">
-              No data yet.
+              {t("assets.allocation.empty")}
             </div>
           )}
           {isLoading ? (
             <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/55 backdrop-blur-[1px]">
               <div className="flex items-center gap-2 rounded-md border border-border/70 bg-card px-3 py-2 text-sm text-muted-foreground shadow-sm">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading chart...
+                {t("assets.allocation.loading")}
               </div>
             </div>
           ) : null}
@@ -86,7 +88,7 @@ export function AssetAllocationChart({
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">No data yet.</p>
+            <p className="text-sm text-muted-foreground">{t("assets.allocation.empty")}</p>
           )}
         </div>
       </CardContent>

@@ -10,6 +10,10 @@ Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. 
   - `ASSET_CREDENTIAL_ENCRYPTION_KEY`: 32-byte master key for encrypting stored CEX API Key, API Secret, and Passphrase values. Generate with `openssl rand -base64 32` and store as `base64:<output>`.
   - `CRON_SECRET`: long random string used by cron routes.
   - `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
+  - `OKX_WEB3_API_KEY`: OKX Web3 API key used by the Assets on-chain provider.
+  - `OKX_WEB3_API_SECRET`: OKX Web3 API secret used to sign on-chain provider requests.
+  - `OKX_WEB3_PASSPHRASE`: OKX Web3 API passphrase used to sign on-chain provider requests.
+  - `OKX_WEB3_PROJECT_ID`: optional OKX Web3 project ID, if required by the OKX Web3 app.
   - `GOOGLE_CLIENT_SECRET`: optional, if Google OAuth is enabled.
   - `GITHUB_CLIENT_SECRET`: optional, if GitHub OAuth is enabled.
 - Non-secret runtime vars:

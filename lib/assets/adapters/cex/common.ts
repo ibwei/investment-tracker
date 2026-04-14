@@ -59,6 +59,25 @@ type FetchJsonInit = RequestInit & {
   timeoutMs?: number;
 };
 
+async function readProviderErrorMessage(response: Response) {
+  const text = await response.text().catch(() => "");
+  if (!text) {
+    return "";
+  }
+
+  try {
+    const payload = JSON.parse(text) as {
+      message?: string;
+      msg?: string;
+      error?: string;
+      error_message?: string;
+    };
+    return payload.message || payload.msg || payload.error_message || payload.error || text.slice(0, 240);
+  } catch {
+    return text.slice(0, 240);
+  }
+}
+
 export async function fetchJson<T>(provider: string, url: string, init?: FetchJsonInit) {
   const { timeoutMs, signal, ...requestInit } = init ?? {};
   const controller = timeoutMs ? new AbortController() : null;
@@ -80,8 +99,9 @@ export async function fetchJson<T>(provider: string, url: string, init?: FetchJs
   });
 
   if (!response.ok) {
+    const providerMessage = await readProviderErrorMessage(response);
     throw new AssetProviderError(
-      `${provider} request failed with HTTP ${response.status}.`,
+      `${provider} request failed with HTTP ${response.status}${providerMessage ? `: ${providerMessage}` : ""}.`,
       classifyHttpError(response.status),
       response.status
     );

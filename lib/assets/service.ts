@@ -12,7 +12,7 @@ import type {
   NormalizedAssetPosition,
 } from "@/lib/assets/types";
 import { decryptAssetConfig, encryptAssetConfig } from "@/lib/assets/encryption";
-import { AssetProviderError, getCexAdapter } from "@/lib/assets/adapters";
+import { AssetProviderError, getCexAdapter, getOnchainAdapter } from "@/lib/assets/adapters";
 
 const DEFAULT_LIMIT = 20;
 const MAX_PAGE_SIZE = 50;
@@ -310,6 +310,10 @@ function summarizeTopAssets(
   }
 
   for (const item of balances) {
+    if (item.category === "DETAIL") {
+      continue;
+    }
+
     addItem({
       key: `source:${item.sourceId}`,
       label: item.sourceName ?? "Unknown source",
@@ -422,6 +426,14 @@ async function listAllPositions(userId: number) {
     `,
     [userId]
   );
+}
+
+function isCountedBalance(item: { category?: string | null }) {
+  return item.category !== "DETAIL";
+}
+
+function countedBalanceValue(item: { category?: string | null; valueUsd?: number | string | null }) {
+  return isCountedBalance(item) ? Number(item.valueUsd ?? 0) : 0;
 }
 
 async function findSource(userId: number, sourceId: number) {
@@ -566,7 +578,7 @@ export async function captureAssetSnapshot(userId: number, capturedAt = new Date
   const createdAt = new Date(capturedAt).toISOString();
 
   const totalValueUsd =
-    balances.reduce((sum, item) => sum + Number(item.valueUsd ?? 0), 0) +
+    balances.reduce((sum, item) => sum + countedBalanceValue(item), 0) +
     positions.reduce((sum, item) => sum + Number(item.netValueUsd ?? 0), 0) +
     manualAssets.reduce((sum, item) => sum + Number(item.valueUsd ?? 0), 0);
 
@@ -577,6 +589,10 @@ export async function captureAssetSnapshot(userId: number, capturedAt = new Date
   const categoryTotals = new Map<string, number>();
 
   for (const balance of balances) {
+    if (!isCountedBalance(balance)) {
+      continue;
+    }
+
     if (balance.sourceType) {
       sourceTypeTotals[balance.sourceType] += Number(balance.valueUsd ?? 0);
     }
@@ -683,7 +699,7 @@ export async function getAssetSummary(userId: number): Promise<AssetSummaryRespo
   ]);
 
   const totalValueUsd =
-    balances.reduce((sum, item) => sum + Number(item.valueUsd ?? 0), 0) +
+    balances.reduce((sum, item) => sum + countedBalanceValue(item), 0) +
     positions.reduce((sum, item) => sum + Number(item.netValueUsd ?? 0), 0) +
     manualAssets.reduce((sum, item) => sum + Number(item.valueUsd ?? 0), 0);
   const previousTotal = Number(snapshots[1]?.totalValueUsd ?? snapshots[0]?.totalValueUsd ?? totalValueUsd);
@@ -701,6 +717,10 @@ export async function getAssetSummary(userId: number): Promise<AssetSummaryRespo
   const categoryTotals = new Map<string, number>();
 
   for (const item of balances) {
+    if (!isCountedBalance(item)) {
+      continue;
+    }
+
     if (item.sourceType) {
       sourceTypeTotals[item.sourceType] += Number(item.valueUsd ?? 0);
     }
@@ -802,7 +822,7 @@ export async function listAssetSources(
           where asset_positions.source_id = asset_sources.id
         ) as "positionCount",
         (
-          coalesce((select sum(value_usd) from asset_balances where asset_balances.source_id = asset_sources.id), 0) +
+          coalesce((select sum(value_usd) from asset_balances where asset_balances.source_id = asset_sources.id and asset_balances.category <> 'DETAIL'), 0) +
           coalesce((select sum(net_value_usd) from asset_positions where asset_positions.source_id = asset_sources.id), 0)
         )::text as "totalValueUsd"
       from asset_sources
@@ -843,7 +863,7 @@ export async function getAssetSource(userId: number, sourceId: number) {
           where asset_positions.source_id = asset_sources.id
         ) as "positionCount",
         (
-          coalesce((select sum(value_usd) from asset_balances where asset_balances.source_id = asset_sources.id), 0) +
+          coalesce((select sum(value_usd) from asset_balances where asset_balances.source_id = asset_sources.id and asset_balances.category <> 'DETAIL'), 0) +
           coalesce((select sum(net_value_usd) from asset_positions where asset_positions.source_id = asset_sources.id), 0)
         )::text as "totalValueUsd"
       from asset_sources
@@ -1328,26 +1348,39 @@ export async function syncAssetSource(userId: number, sourceId: number) {
   let status = "SUCCESS";
 
   try {
-    if (source.type !== "CEX") {
-      throw new AssetProviderError(
-        `${source.provider} on-chain sync is not implemented yet.`,
-        "UNKNOWN"
-      );
+    if (source.type === "CEX") {
+      const adapter = getCexAdapter(source.provider);
+      if (!adapter) {
+        throw new AssetProviderError(
+          `${source.provider} CEX sync is not implemented yet.`,
+          "UNKNOWN"
+        );
+      }
+
+      const config = decryptAssetConfig(source.encryptedConfig);
+      assert(config, "Source configuration is missing.", 400);
+
+      balances = await adapter.getBalances(config);
+      positions = adapter.getPositions ? await adapter.getPositions(config) : [];
+    } else {
+      const adapter = getOnchainAdapter(source.provider);
+      if (!adapter) {
+        throw new AssetProviderError(
+          `${source.provider} on-chain sync is not implemented yet.`,
+          "UNKNOWN"
+        );
+      }
+
+      assert(source.publicRef, "Wallet address is missing.", 400);
+
+      const config = {
+        address: source.publicRef,
+        provider: source.provider,
+      };
+
+      balances = await adapter.getBalances(config);
+      positions = await adapter.getPositions(config);
     }
-
-    const adapter = getCexAdapter(source.provider);
-    if (!adapter) {
-      throw new AssetProviderError(
-        `${source.provider} CEX sync is not implemented yet.`,
-        "UNKNOWN"
-      );
-    }
-
-    const config = decryptAssetConfig(source.encryptedConfig);
-    assert(config, "Source configuration is missing.", 400);
-
-    balances = await adapter.getBalances(config);
-    positions = adapter.getPositions ? await adapter.getPositions(config) : [];
   } catch (error) {
     status = "FAILED";
     errorMessage = toSyncErrorSummary(error);

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ManualAssetRecord } from "@/lib/assets/types";
+import { useI18n } from "@/lib/i18n";
 
 const initialState = {
   name: "",
@@ -44,6 +45,16 @@ export function ManualAssetForm({
   isSubmitting: boolean;
 }) {
   const [values, setValues] = useState(initialState);
+  const { t } = useI18n();
+
+  const typeOptions = [
+    { value: "CASH", label: t("assets.manualAssets.types.cash") },
+    { value: "STOCK", label: t("assets.manualAssets.types.stock") },
+    { value: "FUND", label: t("assets.manualAssets.types.fund") },
+    { value: "TOKEN", label: t("assets.manualAssets.types.token") },
+    { value: "REAL_ESTATE", label: t("assets.manualAssets.types.realEstate") },
+    { value: "OTHER", label: t("assets.manualAssets.types.other") },
+  ];
 
   useEffect(() => {
     if (asset) {
@@ -73,24 +84,24 @@ export function ManualAssetForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{asset ? "Edit Manual Asset" : "Add Manual Asset"}</DialogTitle>
-          <DialogDescription>
-            USD value is the number that contributes to total assets, allocation, and snapshots.
-          </DialogDescription>
+          <DialogTitle>
+            {asset ? t("assets.forms.editManualTitle") : t("assets.forms.addManualTitle")}
+          </DialogTitle>
+          <DialogDescription>{t("assets.forms.manualDescription")}</DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="manual-name">Name</Label>
+            <Label htmlFor="manual-name">{t("assets.forms.name")}</Label>
             <Input
               id="manual-name"
               value={values.name}
               onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))}
-              placeholder="VOO ETF"
+              placeholder={t("assets.forms.manualNamePlaceholder")}
               required
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="manual-type">Type</Label>
+            <Label htmlFor="manual-type">{t("assets.manualAssets.headers.type")}</Label>
             <Select
               value={values.type}
               onValueChange={(value) => setValues((current) => ({ ...current, type: value }))}
@@ -99,9 +110,9 @@ export function ManualAssetForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {["CASH", "STOCK", "FUND", "TOKEN", "REAL_ESTATE", "OTHER"].map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
+                {typeOptions.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -109,7 +120,7 @@ export function ManualAssetForm({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="manual-amount">Amount</Label>
+              <Label htmlFor="manual-amount">{t("assets.forms.amount")}</Label>
               <Input
                 id="manual-amount"
                 type="number"
@@ -123,7 +134,7 @@ export function ManualAssetForm({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="manual-value-usd">USD Value</Label>
+              <Label htmlFor="manual-value-usd">{t("assets.forms.valueUsd")}</Label>
               <Input
                 id="manual-value-usd"
                 type="number"
@@ -138,20 +149,20 @@ export function ManualAssetForm({
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="manual-note">Note</Label>
+            <Label htmlFor="manual-note">{t("assets.forms.note")}</Label>
             <Textarea
               id="manual-note"
               value={values.note}
               onChange={(event) => setValues((current) => ({ ...current, note: event.target.value }))}
-              placeholder="Valuation basis or update reminder"
+              placeholder={t("assets.forms.notePlaceholder")}
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("assets.forms.cancel")}
             </Button>
             <Button type="submit" loading={isSubmitting}>
-              Save Asset
+              {t("assets.forms.saveAsset")}
             </Button>
           </DialogFooter>
         </form>

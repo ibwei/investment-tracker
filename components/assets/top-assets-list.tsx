@@ -9,6 +9,7 @@ import type {
   AssetPositionRecord,
   AssetSummaryResponse,
 } from "@/lib/assets/types";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type SourceSummary = AssetSummaryResponse["topAssets"][number];
@@ -43,23 +44,23 @@ function getSourceKey(source: SourceSummary) {
   return `${source.sourceType}:${source.sourceId ?? source.sourceName ?? source.label}`;
 }
 
-function getDistributionSummary(source: SourceSummary) {
+function getDistributionSummary(source: SourceSummary, t: (key: string, vars?: Record<string, any>) => string) {
   const parts = [];
   const balanceCount = source.balanceCount ?? 0;
   const positionCount = source.positionCount ?? 0;
   const manualAssetCount = source.manualAssetCount ?? 0;
 
   if (balanceCount > 0) {
-    parts.push(`${balanceCount} tokens`);
+    parts.push(t("assets.topAssets.tokens", { count: balanceCount }));
   }
   if (positionCount > 0) {
-    parts.push(`${positionCount} positions`);
+    parts.push(t("assets.topAssets.positions", { count: positionCount }));
   }
   if (manualAssetCount > 0) {
-    parts.push(`${manualAssetCount} manual assets`);
+    parts.push(t("assets.topAssets.manualAssets", { count: manualAssetCount }));
   }
 
-  return parts.join(" / ") || source.category;
+  return parts.join(" / ") || t("assets.topAssets.distributionFallback", { value: source.category });
 }
 
 export function TopAssetsList({
@@ -67,6 +68,7 @@ export function TopAssetsList({
   isAuthenticated,
   formatDisplayCurrency,
 }: TopAssetsListProps) {
+  const { t } = useI18n();
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
   const [sourceDetails, setSourceDetails] = useState<Record<string, LoadedSourceDetail>>({});
   const [loadingSource, setLoadingSource] = useState<string | null>(null);
@@ -129,22 +131,22 @@ export function TopAssetsList({
         },
       }));
     } catch (error: any) {
-      toast.error(error?.message ?? "Failed to load source detail.");
+      toast.error(error?.message ?? t("assets.topAssets.loadFailed"));
     } finally {
       setLoadingSource(null);
     }
   }
 
   if (assets.length === 0) {
-    return <div className="text-sm text-muted-foreground">No sources yet.</div>;
+    return <div className="text-sm text-muted-foreground">{t("assets.topAssets.empty")}</div>;
   }
 
   return (
     <div className="overflow-hidden rounded-lg border border-border/60 bg-background/40">
       <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-border/60 px-4 py-2 text-xs font-medium uppercase tracking-normal text-muted-foreground sm:grid-cols-[minmax(140px,1fr)_minmax(220px,1.4fr)_auto]">
-        <span>Source</span>
-        <span className="hidden sm:block">Distribution</span>
-        <span className="text-right">Value</span>
+        <span>{t("assets.topAssets.headerSource")}</span>
+        <span className="hidden sm:block">{t("assets.topAssets.headerDistribution")}</span>
+        <span className="text-right">{t("assets.topAssets.headerValue")}</span>
       </div>
       <div className="divide-y divide-border/60">
         {assets.map((source) => {
@@ -176,11 +178,11 @@ export function TopAssetsList({
                     </span>
                   </span>
                   <span className="mt-1 block truncate text-xs text-muted-foreground sm:hidden">
-                    {getDistributionSummary(source)}
+                    {getDistributionSummary(source, t)}
                   </span>
                 </span>
                 <span className="hidden min-w-0 truncate text-sm text-muted-foreground sm:block">
-                  {getDistributionSummary(source)}
+                  {getDistributionSummary(source, t)}
                 </span>
                 <span className="flex justify-end gap-2 text-right font-medium">
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -194,10 +196,12 @@ export function TopAssetsList({
                     <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span>
                         {detail
-                          ? `Updated ${new Date(detail.syncedAt).toLocaleString()}`
+                          ? t("assets.topAssets.updatedAt", {
+                              time: new Date(detail.syncedAt).toLocaleString(),
+                            })
                           : source.sourceType === "MANUAL"
-                            ? "Manual assets are managed separately."
-                            : "Opening this source syncs and loads its token distribution."}
+                            ? t("assets.topAssets.manualHint")
+                            : t("assets.topAssets.openHint")}
                       </span>
                       {source.sourceId && source.sourceType !== "MANUAL" ? (
                         <Button
@@ -216,7 +220,7 @@ export function TopAssetsList({
                           }}
                         >
                           <RefreshCcw className="h-4 w-4" />
-                          Refresh
+                          {t("assets.topAssets.refresh")}
                         </Button>
                       ) : null}
                     </div>
@@ -263,13 +267,15 @@ export function TopAssetsList({
                     {detail && detail.balances.length === 0 && detail.positions.length === 0 ? (
                       <div className="text-sm text-muted-foreground">
                         {source.sourceType === "MANUAL"
-                          ? "Open the Manual tab to edit these assets."
-                          : "No balance or position data for this source."}
+                          ? t("assets.topAssets.manualEditHint")
+                          : t("assets.topAssets.emptyDetail")}
                       </div>
                     ) : null}
 
                     {!detail && isLoading ? (
-                      <div className="text-sm text-muted-foreground">Loading source detail...</div>
+                      <div className="text-sm text-muted-foreground">
+                        {t("assets.topAssets.loadingDetail")}
+                      </div>
                     ) : null}
                   </div>
                 </div>

@@ -63,6 +63,10 @@ APP_URL="http://localhost:3000"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 RESEND_API_KEY="..."
 RESEND_FROM_EMAIL="CeFiDeFi <alerts@yourdomain.com>"
+OKX_WEB3_API_KEY="..."
+OKX_WEB3_API_SECRET="..."
+OKX_WEB3_PASSPHRASE="..."
+OKX_WEB3_PROJECT_ID="..."
 ```
 
 如需启用 OAuth，再补充：
@@ -81,6 +85,8 @@ openssl rand -base64 32
 ```
 
 把输出保存为 `base64:<output>`。这个值只放在本地 `.env` 或 Cloudflare Secret，不要提交到仓库。
+
+`OKX_WEB3_*` 用于 Assets 模块的 on-chain 同步。当前 OKX Web3 provider 会同步钱包 token 余额和 DeFi protocol 仓位，支持 EVM、Solana、Sui、Tron、Bitcoin 和 TON 地址。
 
 ### 3. 初始化数据库
 

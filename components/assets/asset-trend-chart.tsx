@@ -27,7 +27,7 @@ export function AssetTrendChart({
   onRangeChange: (days: number) => void;
   isLoading: boolean;
 }) {
-  const { formatDate, formatDisplayCurrency } = useI18n();
+  const { formatDate, formatDisplayCurrency, t } = useI18n();
 
   const chartData = useMemo(
     () =>
@@ -42,8 +42,8 @@ export function AssetTrendChart({
     <Card className="border-border/50 bg-card/50">
       <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <CardTitle>Asset Trend</CardTitle>
-          <CardDescription>Snapshot history is fetched on demand and defaults to 30 days.</CardDescription>
+          <CardTitle>{t("assets.trend.title")}</CardTitle>
+          <CardDescription>{t("assets.trend.description")}</CardDescription>
         </div>
         <div className="flex flex-wrap gap-2">
           {[7, 30, 90].map((days) => (
@@ -79,7 +79,7 @@ export function AssetTrendChart({
                   tickFormatter={(value) => formatDisplayCurrency(value, 0)}
                 />
                 <Tooltip
-                  formatter={(value: number) => [formatDisplayCurrency(value), "Total Assets"]}
+                  formatter={(value: number) => [formatDisplayCurrency(value), t("assets.trend.totalAssets")]}
                   labelFormatter={(label) => label}
                   contentStyle={{
                     backgroundColor: "oklch(0.15 0.005 260)",
@@ -100,7 +100,7 @@ export function AssetTrendChart({
               <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/55 backdrop-blur-[1px]">
                 <div className="flex items-center gap-2 rounded-md border border-border/70 bg-card px-3 py-2 text-sm text-muted-foreground shadow-sm">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading trend...
+                  {t("assets.trend.loading")}
                 </div>
               </div>
             ) : null}
@@ -110,10 +110,10 @@ export function AssetTrendChart({
             {isLoading ? (
               <span className="inline-flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading trend...
+                {t("assets.trend.loading")}
               </span>
             ) : (
-              "No snapshot data yet."
+              t("assets.trend.empty")
             )}
           </div>
         )}

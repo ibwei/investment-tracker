@@ -29,25 +29,44 @@ export function ManualAssetList({
   deletingAssetId: number | null;
   isLoading: boolean;
 }) {
-  const { formatDisplayCurrency, formatDate } = useI18n();
+  const { formatDisplayCurrency, formatDate, t } = useI18n();
+
+  function getTypeLabel(type: string) {
+    switch (type) {
+      case "CASH":
+        return t("assets.manualAssets.types.cash");
+      case "STOCK":
+        return t("assets.manualAssets.types.stock");
+      case "FUND":
+        return t("assets.manualAssets.types.fund");
+      case "TOKEN":
+        return t("assets.manualAssets.types.token");
+      case "REAL_ESTATE":
+        return t("assets.manualAssets.types.realEstate");
+      case "OTHER":
+        return t("assets.manualAssets.types.other");
+      default:
+        return type;
+    }
+  }
 
   return (
     <Card className="border-border/50 bg-card/50">
       <CardHeader>
-        <CardTitle>Manual Assets</CardTitle>
-        <CardDescription>USD value is the amount used in aggregation and snapshots.</CardDescription>
+        <CardTitle>{t("assets.manualAssets.title")}</CardTitle>
+        <CardDescription>{t("assets.manualAssets.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>USD Value</TableHead>
-              <TableHead>Note</TableHead>
-              <TableHead>Updated</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{t("assets.manualAssets.headers.name")}</TableHead>
+              <TableHead>{t("assets.manualAssets.headers.type")}</TableHead>
+              <TableHead>{t("assets.manualAssets.headers.amount")}</TableHead>
+              <TableHead>{t("assets.manualAssets.headers.usdValue")}</TableHead>
+              <TableHead>{t("assets.manualAssets.headers.note")}</TableHead>
+              <TableHead>{t("assets.manualAssets.headers.updated")}</TableHead>
+              <TableHead>{t("assets.manualAssets.headers.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -56,7 +75,7 @@ export function ManualAssetList({
                 <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   <span className="inline-flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading manual assets...
+                    {t("assets.manualAssets.loading")}
                   </span>
                 </TableCell>
               </TableRow>
@@ -68,7 +87,7 @@ export function ManualAssetList({
                 return (
                   <TableRow key={asset.id}>
                     <TableCell className="font-medium">{asset.name}</TableCell>
-                    <TableCell>{asset.type}</TableCell>
+                    <TableCell>{getTypeLabel(asset.type)}</TableCell>
                     <TableCell>{asset.amount}</TableCell>
                     <TableCell>{formatDisplayCurrency(asset.valueUsd)}</TableCell>
                     <TableCell className="max-w-[240px] truncate">{asset.note || "-"}</TableCell>
@@ -82,7 +101,7 @@ export function ManualAssetList({
                           disabled={!isAuthenticated || isBusy}
                         >
                           <Pencil className="h-4 w-4" />
-                          Edit
+                          {t("assets.sources.edit")}
                         </Button>
                         <Button
                           variant="outline"
@@ -92,7 +111,7 @@ export function ManualAssetList({
                           loading={isDeleting}
                         >
                           {isDeleting ? null : <Trash2 className="h-4 w-4" />}
-                          Delete
+                          {t("assets.sources.delete")}
                         </Button>
                       </div>
                     </TableCell>
@@ -102,7 +121,7 @@ export function ManualAssetList({
             ) : (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  No manual assets yet.
+                  {t("assets.manualAssets.empty")}
                 </TableCell>
               </TableRow>
             )}

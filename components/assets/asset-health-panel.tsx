@@ -15,20 +15,20 @@ export function AssetHealthPanel({
   syncLogs: AssetSyncLogRecord[];
   isLoading: boolean;
 }) {
-  const { formatDate } = useI18n();
+  const { formatDate, t } = useI18n();
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <Card className="border-border/50 bg-card/50">
         <CardHeader>
-          <CardTitle>Failed Sources</CardTitle>
-          <CardDescription>Only sanitized error summaries are shown here.</CardDescription>
+          <CardTitle>{t("assets.health.failedTitle")}</CardTitle>
+          <CardDescription>{t("assets.health.failedDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading ? (
             <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading failed sources...
+              {t("assets.health.loadingFailed")}
             </p>
           ) : failedSources.length > 0 ? (
             failedSources.map((source) => (
@@ -37,30 +37,32 @@ export function AssetHealthPanel({
                   <div className="font-medium">{source.name}</div>
                   <Badge variant="destructive">{source.status}</Badge>
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">{source.lastError || "Unknown error"}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {source.lastError || t("assets.health.unknownError")}
+                </p>
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">No source issues right now.</p>
+            <p className="text-sm text-muted-foreground">{t("assets.health.emptyFailed")}</p>
           )}
         </CardContent>
       </Card>
       <Card className="border-border/50 bg-card/50">
         <CardHeader>
-          <CardTitle>Recent Sync Logs</CardTitle>
-          <CardDescription>Latest sync attempts for this user.</CardDescription>
+          <CardTitle>{t("assets.health.logsTitle")}</CardTitle>
+          <CardDescription>{t("assets.health.logsDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading ? (
             <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading sync logs...
+              {t("assets.health.loadingLogs")}
             </p>
           ) : syncLogs.length > 0 ? (
             syncLogs.map((log) => (
               <div key={log.id} className="rounded-lg border border-border/60 bg-background/50 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium">{log.sourceName || "All Sources"}</div>
+                  <div className="font-medium">{log.sourceName || t("assets.health.allSources")}</div>
                   <Badge variant={log.status === "FAILED" ? "destructive" : "default"}>
                     {log.status}
                   </Badge>
@@ -72,7 +74,7 @@ export function AssetHealthPanel({
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">No sync logs yet.</p>
+            <p className="text-sm text-muted-foreground">{t("assets.health.emptyLogs")}</p>
           )}
         </CardContent>
       </Card>

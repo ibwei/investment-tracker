@@ -61,7 +61,7 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
 
 export default function AssetsPage() {
   const { isAuthenticated } = useAuth();
-  const { formatDisplayCurrency } = useI18n();
+  const { formatDisplayCurrency, t } = useI18n();
   const [activeTab, setActiveTab] = useState<AssetTab>("overview");
   const [summary, setSummary] = useState<AssetSummaryResponse | null>(null);
   const [sources, setSources] = useState<AssetSourceRecord[]>([]);
@@ -85,12 +85,12 @@ export default function AssetsPage() {
   const [isSyncingAll, setIsSyncingAll] = useState(false);
 
   const tabs = [
-    { key: "overview", label: "Overview" },
-    { key: "trend", label: "Trend" },
-    { key: "sources", label: "Sources" },
-    { key: "manual", label: "Manual" },
-    { key: "balances", label: "Balances" },
-    { key: "health", label: "Health" },
+    { key: "overview", label: t("assets.tabs.overview") },
+    { key: "trend", label: t("assets.tabs.trend") },
+    { key: "sources", label: t("assets.tabs.sources") },
+    { key: "manual", label: t("assets.tabs.manual") },
+    { key: "balances", label: t("assets.tabs.balances") },
+    { key: "health", label: t("assets.tabs.health") },
   ] as const;
 
   async function loadSummary() {
@@ -195,7 +195,7 @@ export default function AssetsPage() {
           setLoadedTabs({ overview: true });
         }
       } catch (error: any) {
-        toast.error(error?.message ?? "Failed to load assets.");
+        toast.error(error?.message ?? t("assets.toast.loadFailed"));
       } finally {
         if (mounted) {
           setIsPageLoading(false);
@@ -242,12 +242,12 @@ export default function AssetsPage() {
       setSourceFormOpen(false);
       setEditingSource(null);
       await refreshSummaryAndOpenTabs();
-      toast.success(response.error ? "Source saved with sync warning." : "Source saved.");
+      toast.success(response.error ? t("assets.toast.saveSourceWarn") : t("assets.toast.saveSource"));
       if (response.error) {
         toast.message(response.error);
       }
     } catch (error: any) {
-      toast.error(error?.message ?? "Failed to save source.");
+      toast.error(error?.message ?? t("assets.toast.saveSourceFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -264,12 +264,12 @@ export default function AssetsPage() {
         method: "POST",
       });
       await refreshSummaryAndOpenTabs();
-      toast.success(response.error ? "Sync finished with warning." : "Sync finished.");
+      toast.success(response.error ? t("assets.toast.syncWarn") : t("assets.toast.syncDone"));
       if (response.error) {
         toast.message(response.error);
       }
     } catch (error: any) {
-      toast.error(error?.message ?? "Failed to sync source.");
+      toast.error(error?.message ?? t("assets.toast.syncFailed"));
     } finally {
       setSyncingSourceId(null);
     }
@@ -284,9 +284,9 @@ export default function AssetsPage() {
     try {
       await requestJson(`/api/assets/sources/${sourceId}`, { method: "DELETE" });
       await refreshSummaryAndOpenTabs();
-      toast.success("Source deleted.");
+      toast.success(t("assets.toast.deleteSource"));
     } catch (error: any) {
-      toast.error(error?.message ?? "Failed to delete source.");
+      toast.error(error?.message ?? t("assets.toast.deleteSourceFailed"));
     } finally {
       setDeletingSourceId(null);
     }
@@ -315,9 +315,9 @@ export default function AssetsPage() {
       setManualFormOpen(false);
       setEditingManualAsset(null);
       await refreshSummaryAndOpenTabs();
-      toast.success("Manual asset saved.");
+      toast.success(t("assets.toast.saveManual"));
     } catch (error: any) {
-      toast.error(error?.message ?? "Failed to save manual asset.");
+      toast.error(error?.message ?? t("assets.toast.saveManualFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -332,9 +332,9 @@ export default function AssetsPage() {
     try {
       await requestJson(`/api/assets/manual/${assetId}`, { method: "DELETE" });
       await refreshSummaryAndOpenTabs();
-      toast.success("Manual asset deleted.");
+      toast.success(t("assets.toast.deleteManual"));
     } catch (error: any) {
-      toast.error(error?.message ?? "Failed to delete manual asset.");
+      toast.error(error?.message ?? t("assets.toast.deleteManualFailed"));
     } finally {
       setDeletingManualAssetId(null);
     }
@@ -351,9 +351,11 @@ export default function AssetsPage() {
         method: "POST",
       });
       await refreshSummaryAndOpenTabs();
-      toast.success(`Processed ${response.results?.length ?? 0} sources.`);
+      toast.success(
+        t("assets.toast.syncAll", { count: response.results?.length ?? 0 })
+      );
     } catch (error: any) {
-      toast.error(error?.message ?? "Failed to sync all sources.");
+      toast.error(error?.message ?? t("assets.toast.syncAllFailed"));
     } finally {
       setIsSyncingAll(false);
     }
@@ -368,10 +370,10 @@ export default function AssetsPage() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Assets</h1>
-            <p className="mt-1 text-muted-foreground">
-              Aggregate CEX, on-chain, and manual assets without mixing them into Investment.
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              {t("assets.title")}
+            </h1>
+            <p className="mt-1 text-muted-foreground">{t("assets.subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -381,14 +383,14 @@ export default function AssetsPage() {
               loading={isSyncingAll}
             >
               {isSyncingAll ? null : <RefreshCcw className="h-4 w-4" />}
-              Sync All
+              {t("assets.syncAll")}
             </Button>
             <Button
               onClick={() => setSourceFormOpen(true)}
               disabled={!isAuthenticated || isSubmitting || isSourceActionPending}
             >
               <Plus className="h-4 w-4" />
-              Add Source
+              {t("assets.addSource")}
             </Button>
             <Button
               variant="outline"
@@ -396,7 +398,7 @@ export default function AssetsPage() {
               disabled={!isAuthenticated || isSubmitting || deletingManualAssetId !== null}
             >
               <Plus className="h-4 w-4" />
-              Add Manual Asset
+              {t("assets.addManual")}
             </Button>
           </div>
         </div>
@@ -405,17 +407,19 @@ export default function AssetsPage() {
           <Card className="mb-6 gap-0 border-primary/20 bg-primary/5 py-0 sm:mb-8">
             <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">Assets Preview</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {t("assets.previewTitle")}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  Browse sample sources, manual assets, allocations, and trend data before connecting real accounts.
+                  {t("assets.previewDescription")}
                 </p>
               </div>
               <div className="flex gap-3">
                 <Button asChild size="sm">
-                  <Link href="/register">Get Started</Link>
+                  <Link href="/register">{t("nav.getStarted")}</Link>
                 </Button>
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/login">Log in</Link>
+                  <Link href="/login">{t("nav.login")}</Link>
                 </Button>
               </div>
             </CardContent>
@@ -442,15 +446,15 @@ export default function AssetsPage() {
             <>
               <div className="grid gap-6 xl:grid-cols-2">
                 <AssetAllocationChart
-                  title="By Source Type"
-                  description="CEX, on-chain, and manual assets are kept distinct."
+                  title={t("assets.allocation.bySourceType")}
+                  description={t("assets.allocation.sourceTypeDescription")}
                   items={summary.sourceTypeBreakdown}
                   labelKey="type"
                   isLoading={isPageLoading || isSyncingAll}
                 />
                 <AssetAllocationChart
-                  title="By Category"
-                  description="Current allocation by balance and position categories."
+                  title={t("assets.allocation.byCategory")}
+                  description={t("assets.allocation.categoryDescription")}
                   items={summary.categoryBreakdown}
                   labelKey="category"
                   isLoading={isPageLoading || isSyncingAll}
@@ -458,8 +462,8 @@ export default function AssetsPage() {
               </div>
               <Card className="border-border/50 bg-card/50">
                 <CardHeader>
-                  <CardTitle>By Source</CardTitle>
-                  <CardDescription>Sources are grouped first, with token distribution loaded on demand.</CardDescription>
+                  <CardTitle>{t("assets.allocation.bySource")}</CardTitle>
+                  <CardDescription>{t("assets.allocation.bySourceDescription")}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <TopAssetsList
@@ -527,7 +531,7 @@ export default function AssetsPage() {
           {isPageLoading ? (
             <div className="rounded-lg border border-dashed border-border/70 px-4 py-10 text-center text-sm text-muted-foreground">
               <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin" />
-              Loading assets...
+              {t("assets.loading")}
             </div>
           ) : null}
         </div>

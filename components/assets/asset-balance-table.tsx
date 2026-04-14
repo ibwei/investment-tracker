@@ -22,25 +22,25 @@ export function AssetBalanceTable({
   positions: AssetPositionRecord[];
   isLoading: boolean;
 }) {
-  const { formatDisplayCurrency, formatDate } = useI18n();
+  const { formatDisplayCurrency, formatDate, t } = useI18n();
 
   return (
     <div className="grid gap-6">
       <Card className="border-border/50 bg-card/50">
         <CardHeader>
-          <CardTitle>Asset Balances</CardTitle>
-          <CardDescription>Loaded only when the balances tab is opened.</CardDescription>
+          <CardTitle>{t("assets.balances.balancesTitle")}</CardTitle>
+          <CardDescription>{t("assets.balances.balancesDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Asset</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>USD Value</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Updated</TableHead>
+                <TableHead>{t("assets.balances.headers.asset")}</TableHead>
+                <TableHead>{t("assets.balances.headers.amount")}</TableHead>
+                <TableHead>{t("assets.balances.headers.usdValue")}</TableHead>
+                <TableHead>{t("assets.balances.headers.source")}</TableHead>
+                <TableHead>{t("assets.balances.headers.category")}</TableHead>
+                <TableHead>{t("assets.balances.headers.updated")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -49,7 +49,7 @@ export function AssetBalanceTable({
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading balances...
+                      {t("assets.balances.loadingBalances")}
                     </span>
                   </TableCell>
                 </TableRow>
@@ -72,7 +72,7 @@ export function AssetBalanceTable({
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No balance data yet.
+                    {t("assets.balances.emptyBalances")}
                   </TableCell>
                 </TableRow>
               )}
@@ -83,19 +83,19 @@ export function AssetBalanceTable({
 
       <Card className="border-border/50 bg-card/50">
         <CardHeader>
-          <CardTitle>DeFi Positions</CardTitle>
-          <CardDescription>Net value uses asset value plus rewards minus debt.</CardDescription>
+          <CardTitle>{t("assets.balances.positionsTitle")}</CardTitle>
+          <CardDescription>{t("assets.balances.positionsDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Protocol</TableHead>
-                <TableHead>Chain</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Net Value</TableHead>
-                <TableHead>Debt</TableHead>
-                <TableHead>Updated</TableHead>
+                <TableHead>{t("assets.balances.headers.protocol")}</TableHead>
+                <TableHead>{t("assets.balances.headers.chain")}</TableHead>
+                <TableHead>{t("assets.balances.headers.type")}</TableHead>
+                <TableHead>{t("assets.balances.headers.netValue")}</TableHead>
+                <TableHead>{t("assets.balances.headers.debt")}</TableHead>
+                <TableHead>{t("assets.balances.headers.updated")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -104,7 +104,7 @@ export function AssetBalanceTable({
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading positions...
+                      {t("assets.balances.loadingPositions")}
                     </span>
                   </TableCell>
                 </TableRow>
@@ -122,7 +122,7 @@ export function AssetBalanceTable({
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No position data yet.
+                    {t("assets.balances.emptyPositions")}
                   </TableCell>
                 </TableRow>
               )}

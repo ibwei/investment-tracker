@@ -27,9 +27,23 @@ export type CexConfig = {
   baseUrl?: string | null;
 };
 
+export type OnchainConfig = {
+  address: string;
+  provider: string;
+  baseUrl?: string | null;
+};
+
 export type CexAdapter = {
   provider: string;
   testConnection(config: CexConfig): Promise<void>;
   getBalances(config: CexConfig): Promise<NormalizedAssetBalance[]>;
   getPositions?(config: CexConfig): Promise<NormalizedAssetPosition[]>;
+};
+
+export type OnchainAdapter = {
+  provider: string;
+  aliases?: string[];
+  testConnection(config: OnchainConfig): Promise<void>;
+  getBalances(config: OnchainConfig): Promise<NormalizedAssetBalance[]>;
+  getPositions(config: OnchainConfig): Promise<NormalizedAssetPosition[]>;
 };

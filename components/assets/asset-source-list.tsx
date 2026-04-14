@@ -40,20 +40,20 @@ export function AssetSourceList({
   deletingSourceId: number | null;
   isActionPending: boolean;
 }) {
-  const { formatDisplayCurrency, formatDate } = useI18n();
+  const { formatDisplayCurrency, formatDate, t } = useI18n();
 
   return (
     <Card className="border-border/50 bg-card/50">
       <CardHeader>
-        <CardTitle>Asset Sources</CardTitle>
-        <CardDescription>Source-level sync state stays separate from manual assets.</CardDescription>
+        <CardTitle>{t("assets.sources.title")}</CardTitle>
+        <CardDescription>{t("assets.sources.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
           <div className="rounded-lg border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading asset sources...
+              {t("assets.sources.loading")}
             </span>
           </div>
         ) : sources.length > 0 ? (
@@ -78,14 +78,25 @@ export function AssetSourceList({
                     <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
                       <div className="flex items-center gap-2">
                         <Database className="h-4 w-4" />
-                        {source.balanceCount ?? 0} balances / {source.positionCount ?? 0} positions
+                        {t("assets.sources.balances", {
+                          balances: source.balanceCount ?? 0,
+                          positions: source.positionCount ?? 0,
+                        })}
                       </div>
                       <div className="flex items-center gap-2">
                         <Wallet className="h-4 w-4" />
                         {formatDisplayCurrency(source.totalValueUsd ?? 0)}
                       </div>
-                      <div>Last sync: {source.lastSyncedAt ? formatDate(source.lastSyncedAt) : "Never"}</div>
-                      {source.publicRef ? <div className="truncate">Ref: {source.publicRef}</div> : null}
+                      <div>
+                        {t("assets.sources.lastSync", {
+                          value: source.lastSyncedAt
+                            ? formatDate(source.lastSyncedAt)
+                            : t("assets.summary.never"),
+                        })}
+                      </div>
+                      {source.publicRef ? (
+                        <div className="truncate">{t("assets.sources.ref", { value: source.publicRef })}</div>
+                      ) : null}
                     </div>
                     {source.lastError ? (
                       <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -101,7 +112,7 @@ export function AssetSourceList({
                       disabled={!isAuthenticated || isBusy}
                     >
                       <Pencil className="h-4 w-4" />
-                      Edit
+                      {t("assets.sources.edit")}
                     </Button>
                     <Button
                       variant="outline"
@@ -111,7 +122,7 @@ export function AssetSourceList({
                       loading={isSyncing}
                     >
                       {isSyncing ? null : <RefreshCcw className="h-4 w-4" />}
-                      Sync
+                      {t("assets.sources.sync")}
                     </Button>
                     <Button
                       variant="outline"
@@ -121,7 +132,7 @@ export function AssetSourceList({
                       loading={isDeleting}
                     >
                       {isDeleting ? null : <Trash2 className="h-4 w-4" />}
-                      Delete
+                      {t("assets.sources.delete")}
                     </Button>
                   </div>
                 </div>
@@ -130,7 +141,7 @@ export function AssetSourceList({
           })
         ) : (
           <div className="rounded-lg border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-            No asset sources yet.
+            {t("assets.sources.empty")}
           </div>
         )}
       </CardContent>

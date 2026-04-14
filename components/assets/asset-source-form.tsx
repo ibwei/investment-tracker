@@ -20,9 +20,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AssetSourceRecord } from "@/lib/assets/types";
+import { useI18n } from "@/lib/i18n";
 
 const CEX_PROVIDERS = ["BINANCE", "OKX", "BYBIT", "BITGET", "GATE", "HTX", "KUCOIN"];
-const ONCHAIN_PROVIDERS = ["AUTO", "EVM", "SOLANA", "SUI"];
+const ONCHAIN_PROVIDERS = [
+  "OKX_WEB3",
+  "AUTO",
+  "OKX_EVM",
+  "OKX_SOLANA",
+  "OKX_SUI",
+  "OKX_TRON",
+  "OKX_BITCOIN",
+  "OKX_TON",
+];
 const PASSPHRASE_REQUIRED = new Set(["OKX", "BITGET", "KUCOIN"]);
 
 const initialState = {
@@ -50,6 +60,7 @@ export function AssetSourceForm({
   isSubmitting: boolean;
 }) {
   const [values, setValues] = useState(initialState);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!open) {
@@ -91,17 +102,17 @@ export function AssetSourceForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{source ? "Edit Asset Source" : "Add Asset Source"}</DialogTitle>
+          <DialogTitle>
+            {source ? t("assets.forms.editSourceTitle") : t("assets.forms.addSourceTitle")}
+          </DialogTitle>
           <DialogDescription>
-            Use read-only API keys only. No trading or withdrawal permissions are needed.
-            {source?.type === "CEX"
-              ? " Leave credential fields empty to keep the saved API key."
-              : ""}
+            {t("assets.forms.sourceDescription")}
+            {source?.type === "CEX" ? ` ${t("assets.forms.sourceEditHint")}` : ""}
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="source-type">Source Type</Label>
+            <Label htmlFor="source-type">{t("assets.forms.sourceType")}</Label>
             <Select
               value={values.type}
               disabled={Boolean(source)}
@@ -109,7 +120,7 @@ export function AssetSourceForm({
                 setValues((current) => ({
                   ...current,
                   type: value,
-                  provider: value === "CEX" ? "BINANCE" : "AUTO",
+                  provider: value === "CEX" ? "BINANCE" : "OKX_WEB3",
                 }))
               }
             >
@@ -117,14 +128,14 @@ export function AssetSourceForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="CEX">CEX</SelectItem>
-                <SelectItem value="ONCHAIN">On-chain</SelectItem>
+                <SelectItem value="CEX">{t("assets.forms.sourceTypeCex")}</SelectItem>
+                <SelectItem value="ONCHAIN">{t("assets.forms.sourceTypeOnchain")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="source-provider">Provider</Label>
+            <Label htmlFor="source-provider">{t("assets.forms.provider")}</Label>
             <Select
               value={values.provider}
               disabled={Boolean(source)}
@@ -144,21 +155,21 @@ export function AssetSourceForm({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="source-name">Name</Label>
+            <Label htmlFor="source-name">{t("assets.forms.name")}</Label>
             <Input
               id="source-name"
               value={values.name}
               onChange={(event) =>
                 setValues((current) => ({ ...current, name: event.target.value }))
               }
-              placeholder="Optional, defaults to provider name"
+              placeholder={t("assets.forms.namePlaceholder")}
             />
           </div>
 
           {values.type === "CEX" ? (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="api-key">API Key</Label>
+                <Label htmlFor="api-key">{t("assets.forms.apiKey")}</Label>
                 <Input
                   id="api-key"
                   value={values.apiKey}
@@ -169,7 +180,7 @@ export function AssetSourceForm({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="api-secret">API Secret</Label>
+                <Label htmlFor="api-secret">{t("assets.forms.apiSecret")}</Label>
                 <Input
                   id="api-secret"
                   type="password"
@@ -182,7 +193,9 @@ export function AssetSourceForm({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="passphrase">
-                  Passphrase {PASSPHRASE_REQUIRED.has(values.provider) ? "(required)" : "(optional)"}
+                  {PASSPHRASE_REQUIRED.has(values.provider)
+                    ? t("assets.forms.passphraseRequired")
+                    : t("assets.forms.passphraseOptional")}
                 </Label>
                 <Input
                   id="passphrase"
@@ -196,7 +209,7 @@ export function AssetSourceForm({
               </div>
               {values.provider === "KUCOIN" ? (
                 <div className="grid gap-2">
-                  <Label htmlFor="api-key-version">API Key Version</Label>
+                  <Label htmlFor="api-key-version">{t("assets.forms.apiKeyVersion")}</Label>
                   <Input
                     id="api-key-version"
                     value={values.apiKeyVersion}
@@ -209,32 +222,35 @@ export function AssetSourceForm({
                     placeholder="3"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Use the version shown in KuCoin API Management. New app-created keys may show 3.
+                    {t("assets.forms.apiKeyVersionHint")}
                   </p>
                 </div>
               ) : null}
             </>
           ) : (
             <div className="grid gap-2">
-              <Label htmlFor="wallet-address">Wallet Address</Label>
+              <Label htmlFor="wallet-address">{t("assets.forms.walletAddress")}</Label>
               <Input
                 id="wallet-address"
                 value={values.publicRef}
                 onChange={(event) =>
                   setValues((current) => ({ ...current, publicRef: event.target.value }))
                 }
-                placeholder="0x... or Solana/Sui address"
+                placeholder={t("assets.forms.walletPlaceholder")}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                {t("assets.forms.walletHint")}
+              </p>
             </div>
           )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("assets.forms.cancel")}
             </Button>
             <Button type="submit" loading={isSubmitting}>
-              {source ? "Save Changes" : "Save Source"}
+              {source ? t("assets.forms.saveChanges") : t("assets.forms.saveSource")}
             </Button>
           </DialogFooter>
         </form>
