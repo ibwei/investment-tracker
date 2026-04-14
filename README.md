@@ -52,7 +52,7 @@ npm install
 
 ### 2. 配置环境变量
 
-创建 `.env`。本地开发如果只看预览模式可以不连数据库；一旦登录、注册、访问远程 API 或执行构建期需要数据库的代码，就需要至少配置：
+复制 [.env.example](/Users/baiwei/Desktop/berry/earn/cefidefi/.env.example:1) 为 `.env`。本地开发如果只看预览模式可以不连数据库；一旦登录、注册、访问远程 API 或执行构建期需要数据库的代码，就需要至少配置：
 
 ```env
 DATABASE_URL="postgresql://..."
@@ -87,6 +87,8 @@ openssl rand -base64 32
 把输出保存为 `base64:<output>`。这个值只放在本地 `.env` 或 Cloudflare Secret，不要提交到仓库。
 
 `OKX_WEB3_*` 用于 Assets 模块的 on-chain 同步。当前 OKX Web3 provider 会同步钱包 token 余额和 DeFi protocol 仓位，支持 EVM、Solana、Sui、Tron、Bitcoin 和 TON 地址。
+
+如果使用 Wrangler 本地预览，也从 [.env.example](/Users/baiwei/Desktop/berry/earn/cefidefi/.env.example:1) 复制一份为 `.dev.vars`，并按预览环境填入真实值。不要使用或提交 `var.env` / `vars.env`；本项目只维护 `.env.example` 这一份环境变量模板，本地私密配置放在 `.env` 或 `.dev.vars`。
 
 ### 3. 初始化数据库
 

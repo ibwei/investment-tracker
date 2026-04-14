@@ -23,7 +23,9 @@ Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. 
   - `GOOGLE_CLIENT_ID`: optional, if Google OAuth is enabled.
   - `GITHUB_CLIENT_ID`: optional, if GitHub OAuth is enabled.
 
-For local Cloudflare preview, copy `.dev.vars.example` to `.dev.vars` and fill in real values. Do not commit `.dev.vars`.
+Use [.env.example](/Users/baiwei/Desktop/berry/earn/cefidefi/.env.example:1) as the single environment variable template. Copy it to `.env` for regular Next.js local development, or copy it to `.dev.vars` for local Cloudflare preview through Wrangler. Fill in real values before running `npm run preview`. Do not commit `.env` or `.dev.vars`.
+
+Do not create `var.env` or `vars.env`. If one appears locally, migrate its values into `.env` or `.dev.vars` as appropriate, then delete it.
 
 ## Runtime Vars vs Build Vars
 
