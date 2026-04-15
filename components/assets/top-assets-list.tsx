@@ -20,10 +20,15 @@ type LoadedSourceDetail = {
   syncedAt: string;
 };
 
+type SourceSyncResponse = {
+  summary?: AssetSummaryResponse;
+};
+
 type TopAssetsListProps = {
   assets: SourceSummary[];
   isAuthenticated: boolean;
   formatDisplayCurrency: (value: number) => string;
+  onSummaryChange?: (summary: AssetSummaryResponse) => void;
 };
 
 const MIN_VISIBLE_BALANCE_USD = 0.1;
@@ -69,6 +74,7 @@ export function TopAssetsList({
   assets,
   isAuthenticated,
   formatDisplayCurrency,
+  onSummaryChange,
 }: TopAssetsListProps) {
   const { t } = useI18n();
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
@@ -112,9 +118,12 @@ export function TopAssetsList({
     setLoadingSource(sourceKey);
 
     try {
-      await requestJson(`/api/assets/sources/${source.sourceId}/sync`, {
-        method: "POST",
-      });
+      const syncPayload = await requestJson<SourceSyncResponse>(
+        `/api/assets/sources/${source.sourceId}/sync`,
+        {
+          method: "POST",
+        }
+      );
       const [balancePayload, positionPayload] = await Promise.all([
         requestJson<{ balances: AssetBalanceRecord[] }>(
           `/api/assets/balances?sourceId=${source.sourceId}&limit=50&offset=0&sort=valueUsd.desc`
@@ -132,6 +141,9 @@ export function TopAssetsList({
           syncedAt: new Date().toISOString(),
         },
       }));
+      if (syncPayload.summary) {
+        onSummaryChange?.(syncPayload.summary);
+      }
     } catch (error: any) {
       toast.error(error?.message ?? t("assets.topAssets.loadFailed"));
     } finally {

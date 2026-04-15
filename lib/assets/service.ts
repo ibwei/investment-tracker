@@ -18,6 +18,14 @@ const DEFAULT_LIMIT = 20;
 const MAX_PAGE_SIZE = 50;
 const MAX_SOURCES_PER_USER = 10;
 const MAX_MANUAL_ASSETS_PER_USER = 50;
+const VALID_BALANCE_CATEGORIES = new Set<NormalizedAssetBalance["category"]>([
+  "SPOT",
+  "EARN",
+  "DEFI",
+  "CASH",
+  "DETAIL",
+  "OTHER",
+]);
 
 const SOURCE_FIELDS = `
   id,
@@ -504,7 +512,7 @@ async function replaceSourceBalances(
     sourceId,
   ]);
 
-  for (const balance of balances) {
+  for (const balance of mergeDuplicateBalances(balances)) {
     await client.query(
       `
         insert into asset_balances (
@@ -1392,6 +1400,72 @@ function toSyncErrorSummary(error: unknown) {
   return "Asset sync failed.";
 }
 
+function normalizeBalanceSymbol(assetSymbol: string) {
+  const normalized = assetSymbol.trim().toUpperCase();
+  return normalized || "UNKNOWN";
+}
+
+function normalizeBalanceCategory(category: NormalizedAssetBalance["category"]) {
+  const normalized = String(category).trim().toUpperCase();
+  return VALID_BALANCE_CATEGORIES.has(normalized as NormalizedAssetBalance["category"])
+    ? (normalized as NormalizedAssetBalance["category"])
+    : "OTHER";
+}
+
+function toFiniteNumber(value: number) {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function mergeRawBalanceData(existing: unknown, incoming: unknown) {
+  const existingItems =
+    existing &&
+    typeof existing === "object" &&
+    "merged" in existing &&
+    "items" in existing &&
+    Array.isArray((existing as { items?: unknown[] }).items)
+      ? ((existing as { items: unknown[] }).items ?? [])
+      : existing === undefined
+        ? []
+        : [existing];
+  const incomingItems = incoming === undefined ? [] : [incoming];
+
+  return {
+    merged: true,
+    itemCount: existingItems.length + incomingItems.length,
+    items: [...existingItems, ...incomingItems],
+  };
+}
+
+function mergeDuplicateBalances(balances: NormalizedAssetBalance[]) {
+  const merged = new Map<string, NormalizedAssetBalance>();
+
+  for (const balance of balances) {
+    const assetSymbol = normalizeBalanceSymbol(balance.assetSymbol);
+    const category = normalizeBalanceCategory(balance.category);
+    const key = `${assetSymbol}:${category}`;
+    const existing = merged.get(key);
+
+    if (existing) {
+      existing.amount += toFiniteNumber(balance.amount);
+      existing.valueUsd += toFiniteNumber(balance.valueUsd);
+      existing.assetName = existing.assetName || balance.assetName || assetSymbol;
+      existing.rawData = mergeRawBalanceData(existing.rawData, balance.rawData);
+      continue;
+    }
+
+    merged.set(key, {
+      ...balance,
+      assetSymbol,
+      assetName: balance.assetName || assetSymbol,
+      amount: toFiniteNumber(balance.amount),
+      valueUsd: toFiniteNumber(balance.valueUsd),
+      category,
+    });
+  }
+
+  return Array.from(merged.values());
+}
+
 export async function syncAssetSource(userId: number, sourceId: number) {
   const normalizedUserId = normalizeUserId(userId);
   const normalizedSourceId = Number(sourceId);
@@ -1438,6 +1512,8 @@ export async function syncAssetSource(userId: number, sourceId: number) {
       balances = await adapter.getBalances(config);
       positions = await adapter.getPositions(config);
     }
+
+    balances = mergeDuplicateBalances(balances);
   } catch (error) {
     status = "FAILED";
     errorMessage = toSyncErrorSummary(error);

@@ -224,14 +224,20 @@ export default function AssetsPage() {
     }
   }
 
-  async function refreshSummaryAndOpenTabs(nextSummary?: AssetSummaryResponse) {
-    if (nextSummary) {
-      setSummary(nextSummary);
-    } else {
-      await loadSummary();
+  async function refreshAllAssetData(fallbackSummary?: AssetSummaryResponse) {
+    if (fallbackSummary) {
+      setSummary(fallbackSummary);
     }
 
-    const tabsToRefresh = Object.keys(loadedTabs).filter((key) => loadedTabs[key]) as AssetTab[];
+    try {
+      await loadSummary();
+    } catch (error) {
+      if (!fallbackSummary) {
+        throw error;
+      }
+    }
+
+    const tabsToRefresh: AssetTab[] = ["trend", "sources", "manual", "balances", "health"];
     for (const tab of tabsToRefresh) {
       await loadTabData(tab, true);
     }
@@ -270,9 +276,12 @@ export default function AssetsPage() {
   }, [trendRange]);
 
   useEffect(() => {
-    if (activeTab !== "overview") {
-      void loadTabData(activeTab);
+    if (activeTab === "overview") {
+      void loadSummary();
+      return;
     }
+
+    void loadTabData(activeTab);
   }, [activeTab, isAuthenticated]);
 
   const topAssets = useMemo(() => summary?.topAssets ?? [], [summary]);
@@ -295,7 +304,7 @@ export default function AssetsPage() {
       setSourceFormOpen(false);
       setEditingSource(null);
       applyAssetMutationResponse(response);
-      await refreshSummaryAndOpenTabs(response.summary);
+      await refreshAllAssetData(response.summary);
       toast.success(response.error ? t("assets.toast.saveSourceWarn") : t("assets.toast.saveSource"));
       if (response.error) {
         toast.message(response.error);
@@ -318,7 +327,7 @@ export default function AssetsPage() {
         method: "POST",
       });
       applyAssetMutationResponse(response);
-      await refreshSummaryAndOpenTabs(response.summary);
+      await refreshAllAssetData(response.summary);
       toast.success(response.error ? t("assets.toast.syncWarn") : t("assets.toast.syncDone"));
       if (response.error) {
         toast.message(response.error);
@@ -341,7 +350,7 @@ export default function AssetsPage() {
         method: "DELETE",
       });
       applyAssetMutationResponse(response);
-      await refreshSummaryAndOpenTabs(response.summary);
+      await refreshAllAssetData(response.summary);
       toast.success(t("assets.toast.deleteSource"));
     } catch (error: any) {
       toast.error(error?.message ?? t("assets.toast.deleteSourceFailed"));
@@ -374,7 +383,7 @@ export default function AssetsPage() {
       setManualFormOpen(false);
       setEditingManualAsset(null);
       applyAssetMutationResponse(response);
-      await refreshSummaryAndOpenTabs(response.summary);
+      await refreshAllAssetData(response.summary);
       toast.success(t("assets.toast.saveManual"));
     } catch (error: any) {
       toast.error(error?.message ?? t("assets.toast.saveManualFailed"));
@@ -395,7 +404,7 @@ export default function AssetsPage() {
       });
       setManualAssets((current) => current.filter((asset) => asset.id !== assetId));
       applyAssetMutationResponse(response);
-      await refreshSummaryAndOpenTabs(response.summary);
+      await refreshAllAssetData(response.summary);
       toast.success(t("assets.toast.deleteManual"));
     } catch (error: any) {
       toast.error(error?.message ?? t("assets.toast.deleteManualFailed"));
@@ -415,7 +424,7 @@ export default function AssetsPage() {
         method: "POST",
       });
       applyAssetMutationResponse(response);
-      await refreshSummaryAndOpenTabs(response.summary);
+      await refreshAllAssetData(response.summary);
       toast.success(
         t("assets.toast.syncAll", { count: response.results?.length ?? 0 })
       );
@@ -535,6 +544,7 @@ export default function AssetsPage() {
                     assets={topAssets}
                     isAuthenticated={isAuthenticated}
                     formatDisplayCurrency={formatDisplayCurrency}
+                    onSummaryChange={setSummary}
                   />
                 </CardContent>
               </Card>
