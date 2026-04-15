@@ -1061,13 +1061,34 @@ export async function deleteAssetSource(userId: number, sourceId: number) {
   const source = await findSource(normalizedUserId, normalizedSourceId);
   assert(source, "Source not found.", 404);
 
-  await execute(`delete from asset_sources where user_id = $1 and id = $2`, [
-    normalizedUserId,
-    normalizedSourceId,
-  ]);
+  await withTransaction(
+    async (client) => {
+      await client.query(`delete from asset_balances where user_id = $1 and source_id = $2`, [
+        normalizedUserId,
+        normalizedSourceId,
+      ]);
+      await client.query(`delete from asset_positions where user_id = $1 and source_id = $2`, [
+        normalizedUserId,
+        normalizedSourceId,
+      ]);
+      await client.query(`delete from asset_sync_logs where user_id = $1 and source_id = $2`, [
+        normalizedUserId,
+        normalizedSourceId,
+      ]);
+
+      const result = await client.query(
+        `delete from asset_sources where user_id = $1 and id = $2`,
+        [normalizedUserId, normalizedSourceId]
+      );
+
+      assert((result.rowCount ?? 0) > 0, "Source was not deleted.", 500);
+    },
+    { retryTransient: true }
+  );
   await captureAssetSnapshot(normalizedUserId);
 
   return {
+    deletedSourceId: normalizedSourceId,
     summary: await getAssetSummary(normalizedUserId),
   };
 }

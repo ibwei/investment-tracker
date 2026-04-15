@@ -48,6 +48,7 @@ type HealthResponse = {
 type AssetMutationResponse = {
   summary?: AssetSummaryResponse;
   source?: AssetSourceRecord;
+  deletedSourceId?: number;
   asset?: ManualAssetRecord;
   results?: Array<{
     source?: AssetSourceRecord;
@@ -205,6 +206,10 @@ export default function AssetsPage() {
       });
     }
 
+    if (response.deletedSourceId) {
+      setSources((current) => current.filter((source) => source.id !== response.deletedSourceId));
+    }
+
     if (response.asset) {
       setManualAssets((current) => {
         const existingIndex = current.findIndex((asset) => asset.id === response.asset?.id);
@@ -335,7 +340,6 @@ export default function AssetsPage() {
       const response = await requestJson<AssetMutationResponse>(`/api/assets/sources/${sourceId}`, {
         method: "DELETE",
       });
-      setSources((current) => current.filter((source) => source.id !== sourceId));
       applyAssetMutationResponse(response);
       await refreshSummaryAndOpenTabs(response.summary);
       toast.success(t("assets.toast.deleteSource"));

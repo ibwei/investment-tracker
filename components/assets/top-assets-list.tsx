@@ -26,6 +26,8 @@ type TopAssetsListProps = {
   formatDisplayCurrency: (value: number) => string;
 };
 
+const MIN_VISIBLE_BALANCE_USD = 0.1;
+
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     cache: "no-store",
@@ -153,6 +155,10 @@ export function TopAssetsList({
           const sourceKey = getSourceKey(source);
           const isExpanded = expandedSource === sourceKey;
           const detail = sourceDetails[sourceKey];
+          const visibleBalances =
+            detail?.balances.filter((balance) => Number(balance.valueUsd ?? 0) >= MIN_VISIBLE_BALANCE_USD) ?? [];
+          const visiblePositions =
+            detail?.positions.filter((position) => Number(position.netValueUsd ?? 0) >= MIN_VISIBLE_BALANCE_USD) ?? [];
           const isLoading = loadingSource === sourceKey;
 
           return (
@@ -225,9 +231,9 @@ export function TopAssetsList({
                       ) : null}
                     </div>
 
-                    {detail?.balances.length ? (
+                    {visibleBalances.length ? (
                       <div className="space-y-2">
-                        {detail.balances.map((balance) => (
+                        {visibleBalances.map((balance) => (
                           <div
                             key={balance.id}
                             className="grid grid-cols-[1fr_auto] gap-3 text-sm"
@@ -245,9 +251,9 @@ export function TopAssetsList({
                       </div>
                     ) : null}
 
-                    {detail?.positions.length ? (
+                    {visiblePositions.length ? (
                       <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
-                        {detail.positions.map((position) => (
+                        {visiblePositions.map((position) => (
                           <div
                             key={position.id}
                             className="grid grid-cols-[1fr_auto] gap-3 text-sm"
@@ -264,7 +270,7 @@ export function TopAssetsList({
                       </div>
                     ) : null}
 
-                    {detail && detail.balances.length === 0 && detail.positions.length === 0 ? (
+                    {detail && visibleBalances.length === 0 && visiblePositions.length === 0 ? (
                       <div className="text-sm text-muted-foreground">
                         {source.sourceType === "MANUAL"
                           ? t("assets.topAssets.manualEditHint")

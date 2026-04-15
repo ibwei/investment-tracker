@@ -13,6 +13,8 @@ import {
 import type { AssetBalanceRecord, AssetPositionRecord } from "@/lib/assets/types";
 import { useI18n } from "@/lib/i18n";
 
+const MIN_VISIBLE_BALANCE_USD = 0.1;
+
 export function AssetBalanceTable({
   balances,
   positions,
@@ -23,6 +25,8 @@ export function AssetBalanceTable({
   isLoading: boolean;
 }) {
   const { formatDisplayCurrency, formatDate, t } = useI18n();
+  const visibleBalances = balances.filter((item) => Number(item.valueUsd ?? 0) >= MIN_VISIBLE_BALANCE_USD);
+  const visiblePositions = positions.filter((item) => Number(item.netValueUsd ?? 0) >= MIN_VISIBLE_BALANCE_USD);
 
   return (
     <div className="grid gap-6">
@@ -53,8 +57,8 @@ export function AssetBalanceTable({
                     </span>
                   </TableCell>
                 </TableRow>
-              ) : balances.length > 0 ? (
-                balances.map((item) => (
+              ) : visibleBalances.length > 0 ? (
+                visibleBalances.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">
                       {item.assetSymbol}
@@ -108,8 +112,8 @@ export function AssetBalanceTable({
                     </span>
                   </TableCell>
                 </TableRow>
-              ) : positions.length > 0 ? (
-                positions.map((item) => (
+              ) : visiblePositions.length > 0 ? (
+                visiblePositions.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.protocolName || item.provider}</TableCell>
                     <TableCell>{item.chain || "-"}</TableCell>

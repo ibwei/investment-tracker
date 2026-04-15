@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Database, Loader2, Pencil, RefreshCcw, Trash2, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,14 @@ function getBadgeVariant(status: string) {
   }
 
   return "secondary";
+}
+
+function maskAddress(value: string) {
+  if (value.length <= 12) {
+    return value;
+  }
+
+  return `${value.slice(0, 4)}****${value.slice(-6)}`;
 }
 
 export function AssetSourceList({
@@ -41,6 +50,7 @@ export function AssetSourceList({
   isActionPending: boolean;
 }) {
   const { formatDisplayCurrency, formatDate, t } = useI18n();
+  const [expandedRefs, setExpandedRefs] = useState<Record<number, boolean>>({});
 
   return (
     <Card className="border-border/50 bg-card/50">
@@ -95,7 +105,21 @@ export function AssetSourceList({
                         })}
                       </div>
                       {source.publicRef ? (
-                        <div className="truncate">{t("assets.sources.ref", { value: source.publicRef })}</div>
+                        <button
+                          type="button"
+                          className="truncate text-left transition-colors hover:text-foreground"
+                          title={expandedRefs[source.id] ? source.publicRef : t("assets.sources.ref", { value: source.publicRef })}
+                          onClick={() =>
+                            setExpandedRefs((current) => ({
+                              ...current,
+                              [source.id]: !current[source.id],
+                            }))
+                          }
+                        >
+                          {t("assets.sources.ref", {
+                            value: expandedRefs[source.id] ? source.publicRef : maskAddress(source.publicRef),
+                          })}
+                        </button>
                       ) : null}
                     </div>
                     {source.lastError ? (
