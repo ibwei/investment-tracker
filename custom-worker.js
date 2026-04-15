@@ -3,6 +3,7 @@ import nextWorker from "./.open-next/worker.js";
 const CRON_PATHS = {
   "0 */12 * * *": "/api/cron/snapshots",
   "0 */4 * * *": "/api/cron/assets/sync",
+  "0 1/4 * * *": "/api/cron/investments/settle",
   "0 2 * * *": "/api/cron/investments/expiry-reminders",
   "0 14 * * *": "/api/cron/investments/expiry-reminders"
 };

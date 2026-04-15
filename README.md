@@ -212,10 +212,12 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 Cloudflare Cron 当前配置：
 
 - `0 */12 * * *`：转发到 `/api/cron/snapshots`，每 12 小时采集收益/组合快照
+- `0 */4 * * *`：转发到 `/api/cron/assets/sync`，每 4 小时同步资产
+- `0 1/4 * * *`：转发到 `/api/cron/investments/settle`，错峰 1 小时后每 4 小时自动结束已到期投资
 - `0 2 * * *`：转发到 `/api/cron/investments/expiry-reminders`，对应 UTC+8 每天 10:00
 - `0 14 * * *`：转发到 `/api/cron/investments/expiry-reminders`，对应 UTC+8 每天 22:00
 
-Cron 时间按 UTC 解释。`Asia/Shanghai` / UTC+8 下，快照采集为每天 08:00 和 20:00，到期提醒为每天 10:00 和 22:00。
+Cron 时间按 UTC 解释。`Asia/Shanghai` / UTC+8 下，快照采集为每天 08:00 和 20:00，资产同步为 08:00、12:00、16:00、20:00、00:00、04:00，自动结束到期投资为 09:00、13:00、17:00、21:00、01:00、05:00，到期提醒为每天 10:00 和 22:00。
 
 ## 文档
 

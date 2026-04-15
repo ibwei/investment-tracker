@@ -37,8 +37,10 @@ Do not create `var.env` or `vars.env`. If one appears locally, migrate its value
 ## Scheduled Jobs
 
 - `wrangler.jsonc` schedules `/api/cron/snapshots` every 12 hours with `0 */12 * * *`. This route also converts matured `ONGOING` investments into `ENDED` before capturing snapshots.
+- `wrangler.jsonc` schedules `/api/cron/investments/settle` every 4 hours, offset by 1 hour from the asset sync job, with `0 1/4 * * *`.
 - `wrangler.jsonc` schedules `/api/cron/investments/expiry-reminders` at `02:00 UTC` and `14:00 UTC` every day.
 - Snapshot capture runs at `08:00` and `20:00` in `Asia/Shanghai`.
+- Auto-settle runs at `09:00`, `13:00`, `17:00`, `21:00`, `01:00`, and `05:00` in `Asia/Shanghai`.
 - `02:00 UTC` equals `10:00` in `Asia/Shanghai`.
 - `14:00 UTC` equals `22:00` in `Asia/Shanghai`.
 - Cloudflare calls `custom-worker.js` through the Worker `scheduled()` handler.

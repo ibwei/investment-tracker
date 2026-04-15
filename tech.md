@@ -775,6 +775,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 
 - `0 */12 * * *` -> `/api/cron/snapshots`
 - `0 */4 * * *` -> `/api/cron/assets/sync`
+- `0 1/4 * * *` -> `/api/cron/investments/settle`
 - `0 2 * * *` -> `/api/cron/investments/expiry-reminders`
 - `0 14 * * *` -> `/api/cron/investments/expiry-reminders`
 
@@ -782,10 +783,11 @@ Cloudflare Cron 使用 UTC：
 
 - `0 */12 * * *` = 每 12 小时一次
 - `0 */4 * * *` = 每 4 小时一次
+- `0 1/4 * * *` = 每 4 小时一次，较整点 4 小时任务错峰 1 小时
 - `02:00 UTC` = `10:00 Asia/Shanghai`
 - `14:00 UTC` = `22:00 Asia/Shanghai`
 
-`/api/cron/investments/settle` 是可手动调用的独立结算 route，当前没有单独配置 Cloudflare Cron，因为 `/api/cron/snapshots` 已经会先执行自动结算。
+`/api/cron/investments/settle` 是独立自动结算 route，并已单独配置 Cloudflare Cron。`/api/cron/snapshots` 仍会在采集快照前执行一次自动结算，确保快照数据包含最新到期状态。
 
 ### 12.4 环境变量
 
