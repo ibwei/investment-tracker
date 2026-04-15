@@ -45,6 +45,18 @@ type HealthResponse = {
   syncLogs: AssetSyncLogRecord[];
 };
 
+type AssetMutationResponse = {
+  summary?: AssetSummaryResponse;
+  source?: AssetSourceRecord;
+  asset?: ManualAssetRecord;
+  results?: Array<{
+    source?: AssetSourceRecord;
+    summary?: AssetSummaryResponse;
+    error?: string | null;
+  }>;
+  error?: string | null;
+};
+
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     cache: "no-store",
@@ -175,8 +187,44 @@ export default function AssetsPage() {
     }
   }
 
-  async function refreshSummaryAndOpenTabs() {
-    await loadSummary();
+  function applyAssetMutationResponse(response: AssetMutationResponse) {
+    if (response.summary) {
+      setSummary(response.summary);
+    }
+
+    if (response.source) {
+      setSources((current) => {
+        const existingIndex = current.findIndex((source) => source.id === response.source?.id);
+        if (existingIndex === -1) {
+          return [response.source as AssetSourceRecord, ...current];
+        }
+
+        return current.map((source) =>
+          source.id === response.source?.id ? (response.source as AssetSourceRecord) : source
+        );
+      });
+    }
+
+    if (response.asset) {
+      setManualAssets((current) => {
+        const existingIndex = current.findIndex((asset) => asset.id === response.asset?.id);
+        if (existingIndex === -1) {
+          return [response.asset as ManualAssetRecord, ...current];
+        }
+
+        return current.map((asset) =>
+          asset.id === response.asset?.id ? (response.asset as ManualAssetRecord) : asset
+        );
+      });
+    }
+  }
+
+  async function refreshSummaryAndOpenTabs(nextSummary?: AssetSummaryResponse) {
+    if (nextSummary) {
+      setSummary(nextSummary);
+    } else {
+      await loadSummary();
+    }
 
     const tabsToRefresh = Object.keys(loadedTabs).filter((key) => loadedTabs[key]) as AssetTab[];
     for (const tab of tabsToRefresh) {
@@ -231,7 +279,7 @@ export default function AssetsPage() {
 
     setIsSubmitting(true);
     try {
-      const response = await requestJson<{ error?: string }>(
+      const response = await requestJson<AssetMutationResponse>(
         editingSource ? `/api/assets/sources/${editingSource.id}` : "/api/assets/sources",
         {
           method: editingSource ? "PATCH" : "POST",
@@ -241,7 +289,8 @@ export default function AssetsPage() {
       );
       setSourceFormOpen(false);
       setEditingSource(null);
-      await refreshSummaryAndOpenTabs();
+      applyAssetMutationResponse(response);
+      await refreshSummaryAndOpenTabs(response.summary);
       toast.success(response.error ? t("assets.toast.saveSourceWarn") : t("assets.toast.saveSource"));
       if (response.error) {
         toast.message(response.error);
@@ -260,10 +309,11 @@ export default function AssetsPage() {
 
     setSyncingSourceId(sourceId);
     try {
-      const response = await requestJson<{ error?: string }>(`/api/assets/sources/${sourceId}/sync`, {
+      const response = await requestJson<AssetMutationResponse>(`/api/assets/sources/${sourceId}/sync`, {
         method: "POST",
       });
-      await refreshSummaryAndOpenTabs();
+      applyAssetMutationResponse(response);
+      await refreshSummaryAndOpenTabs(response.summary);
       toast.success(response.error ? t("assets.toast.syncWarn") : t("assets.toast.syncDone"));
       if (response.error) {
         toast.message(response.error);
@@ -282,8 +332,12 @@ export default function AssetsPage() {
 
     setDeletingSourceId(sourceId);
     try {
-      await requestJson(`/api/assets/sources/${sourceId}`, { method: "DELETE" });
-      await refreshSummaryAndOpenTabs();
+      const response = await requestJson<AssetMutationResponse>(`/api/assets/sources/${sourceId}`, {
+        method: "DELETE",
+      });
+      setSources((current) => current.filter((source) => source.id !== sourceId));
+      applyAssetMutationResponse(response);
+      await refreshSummaryAndOpenTabs(response.summary);
       toast.success(t("assets.toast.deleteSource"));
     } catch (error: any) {
       toast.error(error?.message ?? t("assets.toast.deleteSourceFailed"));
@@ -299,14 +353,15 @@ export default function AssetsPage() {
 
     setIsSubmitting(true);
     try {
+      let response: AssetMutationResponse;
       if (editingManualAsset) {
-        await requestJson(`/api/assets/manual/${editingManualAsset.id}`, {
+        response = await requestJson<AssetMutationResponse>(`/api/assets/manual/${editingManualAsset.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
       } else {
-        await requestJson("/api/assets/manual", {
+        response = await requestJson<AssetMutationResponse>("/api/assets/manual", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -314,7 +369,8 @@ export default function AssetsPage() {
       }
       setManualFormOpen(false);
       setEditingManualAsset(null);
-      await refreshSummaryAndOpenTabs();
+      applyAssetMutationResponse(response);
+      await refreshSummaryAndOpenTabs(response.summary);
       toast.success(t("assets.toast.saveManual"));
     } catch (error: any) {
       toast.error(error?.message ?? t("assets.toast.saveManualFailed"));
@@ -330,8 +386,12 @@ export default function AssetsPage() {
 
     setDeletingManualAssetId(assetId);
     try {
-      await requestJson(`/api/assets/manual/${assetId}`, { method: "DELETE" });
-      await refreshSummaryAndOpenTabs();
+      const response = await requestJson<AssetMutationResponse>(`/api/assets/manual/${assetId}`, {
+        method: "DELETE",
+      });
+      setManualAssets((current) => current.filter((asset) => asset.id !== assetId));
+      applyAssetMutationResponse(response);
+      await refreshSummaryAndOpenTabs(response.summary);
       toast.success(t("assets.toast.deleteManual"));
     } catch (error: any) {
       toast.error(error?.message ?? t("assets.toast.deleteManualFailed"));
@@ -347,10 +407,11 @@ export default function AssetsPage() {
 
     setIsSyncingAll(true);
     try {
-      const response = await requestJson<{ results?: unknown[] }>("/api/assets/sync", {
+      const response = await requestJson<AssetMutationResponse>("/api/assets/sync", {
         method: "POST",
       });
-      await refreshSummaryAndOpenTabs();
+      applyAssetMutationResponse(response);
+      await refreshSummaryAndOpenTabs(response.summary);
       toast.success(
         t("assets.toast.syncAll", { count: response.results?.length ?? 0 })
       );

@@ -90,7 +90,8 @@ export function isTransientConnectionError(error: unknown) {
     code === "ECONNREFUSED" ||
     code === "ETIMEDOUT" ||
     message.includes("Connection terminated unexpectedly") ||
-    message.includes("Client has encountered a connection error")
+    message.includes("Client has encountered a connection error") ||
+    message.includes("Failed to connect to upstream database")
   );
 }
 
@@ -150,6 +151,19 @@ export async function execute(text: string, params: QueryParams = []) {
     try {
       await client.connect();
       return await client.query(text, [...params]);
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  });
+}
+
+export async function withConnection<T>(callback: (client: QueryClient) => Promise<T>) {
+  return withDatabaseRetry(async () => {
+    const client = createClient();
+
+    try {
+      await client.connect();
+      return await callback(client);
     } finally {
       await client.end().catch(() => undefined);
     }

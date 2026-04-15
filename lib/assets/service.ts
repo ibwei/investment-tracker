@@ -1,4 +1,4 @@
-import { execute, query, queryOne, withTransaction } from "@/lib/db";
+import { execute, query, queryOne, withConnection, withTransaction } from "@/lib/db";
 import { toAppDateKey } from "@/lib/time";
 import type {
   AssetBalanceRecord,
@@ -673,8 +673,9 @@ export async function listAssetSnapshots(
 
 export async function getAssetSummary(userId: number): Promise<AssetSummaryResponse> {
   const normalizedUserId = normalizeUserId(userId);
-  const [sources, balances, positions, manualAssets, snapshots] = await Promise.all([
-    query<AssetSourceRecord>(
+  const { sources, balances, positions, manualAssets, snapshots } = await withConnection(
+    async (client) => {
+      const sourcesResult = await client.query<AssetSourceRecord>(
       `
         select ${SOURCE_FIELDS}
         from asset_sources
@@ -682,21 +683,56 @@ export async function getAssetSummary(userId: number): Promise<AssetSummaryRespo
         order by updated_at desc, id desc
       `,
       [normalizedUserId]
-    ),
-    listAllBalances(normalizedUserId),
-    listAllPositions(normalizedUserId),
-    listAllActiveManualAssets(normalizedUserId),
-    query<AssetSnapshotRecord>(
-      `
-        select ${SNAPSHOT_FIELDS}
-        from asset_snapshots
-        where user_id = $1
-        order by snapshot_date desc
-        limit 2
-      `,
-      [normalizedUserId]
-    ),
-  ]);
+      );
+      const balancesResult = await client.query<AssetBalanceRecord>(
+        `
+          select ${BALANCE_FIELDS}
+          from asset_balances
+          join asset_sources on asset_sources.id = asset_balances.source_id
+          where asset_balances.user_id = $1
+          order by value_usd desc, asset_balances.id desc
+        `,
+        [normalizedUserId]
+      );
+      const positionsResult = await client.query<AssetPositionRecord>(
+        `
+          select ${POSITION_FIELDS}
+          from asset_positions
+          join asset_sources on asset_sources.id = asset_positions.source_id
+          where asset_positions.user_id = $1
+          order by net_value_usd desc, asset_positions.id desc
+        `,
+        [normalizedUserId]
+      );
+      const manualAssetsResult = await client.query<ManualAssetRecord>(
+        `
+          select ${MANUAL_FIELDS}
+          from manual_assets
+          where user_id = $1 and is_deleted = false
+          order by updated_at desc, id desc
+        `,
+        [normalizedUserId]
+      );
+      const snapshotsResult = await client.query<AssetSnapshotRecord>(
+        `
+          select ${SNAPSHOT_FIELDS}
+          from asset_snapshots
+          where user_id = $1
+          order by snapshot_date desc
+          limit 2
+        `,
+        [normalizedUserId]
+      );
+
+      return {
+        sources: sourcesResult.rows,
+        balances: balancesResult.rows,
+        positions: positionsResult.rows,
+        manualAssets: manualAssetsResult.rows,
+        snapshots: snapshotsResult.rows,
+      };
+    }
+  );
 
   const totalValueUsd =
     balances.reduce((sum, item) => sum + countedBalanceValue(item), 0) +
