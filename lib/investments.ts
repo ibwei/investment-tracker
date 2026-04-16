@@ -168,9 +168,16 @@ function normalizeUserId(userId) {
   return normalized;
 }
 
+function readFreshnessKey() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 async function fetchRows(userId) {
+  const freshnessKey = readFreshnessKey();
+
   return query(
     `
+      /* investment-read:${freshnessKey} */
       select ${INVESTMENT_FIELDS}
       from investments
       where user_id = $1 and is_deleted = false
@@ -181,8 +188,11 @@ async function fetchRows(userId) {
 }
 
 async function fetchRowById(id, userId) {
+  const freshnessKey = readFreshnessKey();
+
   return queryOne(
     `
+      /* investment-row-read:${freshnessKey} */
       select ${INVESTMENT_FIELDS}
       from investments
       where id = $1 and user_id = $2

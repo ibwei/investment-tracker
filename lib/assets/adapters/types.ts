@@ -2,6 +2,7 @@ import type { NormalizedAssetBalance, NormalizedAssetPosition } from "@/lib/asse
 
 export type AssetProviderErrorCode =
   | "AUTH_FAILED"
+  | "ACCESS_DENIED"
   | "RATE_LIMITED"
   | "PROVIDER_DOWN"
   | "BAD_CONFIG"

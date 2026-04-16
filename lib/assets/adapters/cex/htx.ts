@@ -7,6 +7,13 @@ const PROVIDER = "HTX";
 const DEFAULT_BASE_URL = "https://api.huobi.pro";
 const ACCOUNTS_ENDPOINT = "/v1/account/accounts";
 const TICKERS_ENDPOINT = "/market/tickers";
+const EARN_ACCOUNT_TYPES = new Set([
+  "earn",
+  "investment",
+  "savings",
+  "staking",
+]);
+const BALANCE_ACCOUNT_TYPES = new Set(["spot", ...EARN_ACCOUNT_TYPES]);
 
 // Official docs:
 // https://huobiapi.github.io/docs/spot/v1/en/#get-all-accounts-of-the-current-user
@@ -132,23 +139,49 @@ async function getUsdPriceMap(config: CexConfig) {
   return prices;
 }
 
-async function getSpotAccountBalances(config: CexConfig) {
+async function getAccountBalances(config: CexConfig) {
   const accounts = await htxFetch<HtxAccount[]>(config, ACCOUNTS_ENDPOINT, true);
-  const spotAccounts = accounts.filter((account) => account.type === "spot" && account.state === "working");
+  const balanceAccounts = accounts.filter(
+    (account) =>
+      account.state === "working" &&
+      BALANCE_ACCOUNT_TYPES.has(account.type.toLowerCase())
+  );
 
   return Promise.all(
-    spotAccounts.map((account) =>
-      htxFetch<HtxBalanceResponse>(
-        config,
-        `/v1/account/accounts/${account.id}/balance`,
-        true
-      )
-    )
+    balanceAccounts.map((account) => getAccountBalance(config, account))
   );
 }
 
+async function getAccountBalance(config: CexConfig, account: HtxAccount) {
+  try {
+    return await htxFetch<HtxBalanceResponse>(
+      config,
+      `/v1/account/accounts/${account.id}/balance`,
+      true
+    );
+  } catch (error) {
+    if (error instanceof AssetProviderError && error.code === "UNKNOWN") {
+      return {
+        id: account.id,
+        type: account.type,
+        state: account.state,
+        list: [],
+      };
+    }
+
+    throw error;
+  }
+}
+
+function toBalanceCategory(accountType: string): NormalizedAssetBalance["category"] {
+  return EARN_ACCOUNT_TYPES.has(accountType.toLowerCase()) ? "EARN" : "SPOT";
+}
+
 function normalizeBalances(accounts: HtxBalanceResponse[], prices: Map<string, number>) {
-  const grouped = new Map<string, Array<{ type: string; balance: string; accountId: number }>>();
+  const grouped = new Map<
+    string,
+    Array<{ type: string; balance: string; accountId: number; accountType: string }>
+  >();
 
   for (const account of accounts) {
     for (const item of account.list ?? []) {
@@ -160,33 +193,51 @@ function normalizeBalances(accounts: HtxBalanceResponse[], prices: Map<string, n
       const assetSymbol = item.currency.toUpperCase();
       grouped.set(assetSymbol, [
         ...(grouped.get(assetSymbol) ?? []),
-        { type: item.type, balance: item.balance, accountId: account.id },
+        {
+          type: item.type,
+          balance: item.balance,
+          accountId: account.id,
+          accountType: account.type,
+        },
       ]);
     }
   }
 
-  return Array.from(grouped.entries()).map<NormalizedAssetBalance>(([assetSymbol, records]) => {
-    const amount = records.reduce((sum, record) => sum + toNumber(record.balance), 0);
-    const price = prices.get(assetSymbol) ?? 0;
+  const balances: NormalizedAssetBalance[] = [];
 
-    return {
-      assetSymbol,
-      assetName: assetSymbol,
-      amount,
-      valueUsd: amount * price,
-      category: "SPOT",
-      rawData: {
-        provider: "HTX",
-        balances: records,
-        priceUsd: price,
-      },
-    };
-  });
+  for (const [assetSymbol, records] of grouped.entries()) {
+    const byCategory = new Map<NormalizedAssetBalance["category"], typeof records>();
+
+    for (const record of records) {
+      const category = toBalanceCategory(record.accountType);
+      byCategory.set(category, [...(byCategory.get(category) ?? []), record]);
+    }
+
+    for (const [category, categoryRecords] of byCategory.entries()) {
+      const amount = categoryRecords.reduce((sum, record) => sum + toNumber(record.balance), 0);
+      const price = prices.get(assetSymbol) ?? 0;
+
+      balances.push({
+        assetSymbol,
+        assetName: assetSymbol,
+        amount,
+        valueUsd: amount * price,
+        category,
+        rawData: {
+          provider: "HTX",
+          balances: categoryRecords,
+          priceUsd: price,
+        },
+      });
+    }
+  }
+
+  return balances;
 }
 
 async function getBalances(config: CexConfig) {
   const [balances, prices] = await Promise.all([
-    getSpotAccountBalances(config),
+    getAccountBalances(config),
     getUsdPriceMap(config),
   ]);
 

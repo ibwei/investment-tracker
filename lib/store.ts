@@ -33,6 +33,13 @@ const STATUS_MAP: Record<string, InvestmentStatus> = {
   deleted: 'deleted',
 }
 
+const DEFAULT_FILTERS: FilterOptions = {
+  project: '',
+  type: 'all',
+  status: 'all',
+  search: '',
+}
+
 function normalizeType(type: string): InvestmentType {
   return TYPE_MAP[String(type ?? '').trim().toLowerCase()] ?? 'cedefi'
 }
@@ -151,12 +158,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
     (set, get) => ({
       investments: [],
       isPreviewMode: false,
-      filters: {
-        project: '',
-        type: 'all',
-        status: 'all',
-        search: '',
-      },
+      filters: DEFAULT_FILTERS,
       sortField: 'startDate',
       sortDirection: 'desc',
       isLoading: false,
@@ -202,7 +204,11 @@ export const useInvestmentStore = create<InvestmentStore>()(
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().create(mapFormToPayload(data))
-          set({ investments: mapSnapshot(snapshot), isLoading: false })
+          set({
+            investments: mapSnapshot(snapshot),
+            filters: DEFAULT_FILTERS,
+            isLoading: false,
+          })
         } catch (error: any) {
           set({
             isLoading: false,

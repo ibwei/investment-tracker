@@ -345,6 +345,9 @@ export default function AssetsPage() {
     }
 
     setDeletingSourceId(sourceId);
+    const deletedSource = sources.find((source) => source.id === sourceId) ?? null;
+    setSources((current) => current.filter((source) => source.id !== sourceId));
+
     try {
       const response = await requestJson<AssetMutationResponse>(`/api/assets/sources/${sourceId}`, {
         method: "DELETE",
@@ -353,6 +356,13 @@ export default function AssetsPage() {
       await refreshAllAssetData(response.summary);
       toast.success(t("assets.toast.deleteSource"));
     } catch (error: any) {
+      if (deletedSource) {
+        setSources((current) =>
+          current.some((source) => source.id === deletedSource.id)
+            ? current
+            : [deletedSource, ...current]
+        );
+      }
       toast.error(error?.message ?? t("assets.toast.deleteSourceFailed"));
     } finally {
       setDeletingSourceId(null);

@@ -21,9 +21,17 @@ export function toNumber(value: string | number | null | undefined) {
   return Number.isFinite(number) ? number : 0;
 }
 
-export function classifyHttpError(status: number): AssetProviderErrorCode {
-  if (status === 401 || status === 403) {
+function isProviderEdgeBlock(message: string) {
+  return /request could not be satisfied|cloudfront|access denied|<html/i.test(message);
+}
+
+export function classifyHttpError(status: number, message = ""): AssetProviderErrorCode {
+  if (status === 401) {
     return "AUTH_FAILED";
+  }
+
+  if (status === 403) {
+    return isProviderEdgeBlock(message) ? "ACCESS_DENIED" : "AUTH_FAILED";
   }
 
   if (status === 418 || status === 429) {
@@ -74,6 +82,14 @@ async function readProviderErrorMessage(response: Response) {
     };
     return payload.message || payload.msg || payload.error_message || payload.error || text.slice(0, 240);
   } catch {
+    const title = text.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim();
+    if (response.status === 403 && isProviderEdgeBlock(text)) {
+      return [
+        title || "Provider edge rejected the request.",
+        "The server egress IP or region may be blocked by the exchange.",
+      ].join(" ");
+    }
+
     return text.slice(0, 240);
   }
 }
@@ -102,7 +118,7 @@ export async function fetchJson<T>(provider: string, url: string, init?: FetchJs
     const providerMessage = await readProviderErrorMessage(response);
     throw new AssetProviderError(
       `${provider} request failed with HTTP ${response.status}${providerMessage ? `: ${providerMessage}` : ""}.`,
-      classifyHttpError(response.status),
+      classifyHttpError(response.status, providerMessage),
       response.status
     );
   }

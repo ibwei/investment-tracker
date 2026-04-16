@@ -13,6 +13,7 @@ import type {
 } from "@/lib/assets/types";
 import { decryptAssetConfig, encryptAssetConfig } from "@/lib/assets/encryption";
 import { AssetProviderError, getCexAdapter, getOnchainAdapter } from "@/lib/assets/adapters";
+import type { CexConfig, OnchainConfig } from "@/lib/assets/adapters";
 
 const DEFAULT_LIMIT = 20;
 const MAX_PAGE_SIZE = 50;
@@ -120,6 +121,24 @@ const SYNC_SOURCE_FIELDS = `
   created_at as "createdAt",
   updated_at as "updatedAt"
 `;
+
+type ValidatedSourceInput =
+  | {
+      type: "CEX";
+      provider: string;
+      name: string;
+      publicRef: null;
+      config: CexConfig;
+      encryptedConfig: string;
+    }
+  | {
+      type: "ONCHAIN";
+      provider: string;
+      name: string;
+      publicRef: string;
+      config: OnchainConfig;
+      encryptedConfig: null;
+    };
 
 function assert(condition: unknown, message: string, status = 400): asserts condition {
   if (!condition) {
@@ -927,7 +946,7 @@ export async function getAssetSource(userId: number, sourceId: number) {
   };
 }
 
-function validateSourceInput(input: Record<string, unknown>) {
+function validateSourceInput(input: Record<string, unknown>): ValidatedSourceInput {
   const type = normalizeText(input.type).toUpperCase();
   const provider = normalizeText(input.provider).toUpperCase();
   const name = normalizeText(input.name, provider);
@@ -942,10 +961,16 @@ function validateSourceInput(input: Record<string, unknown>) {
     assert(apiSecret, "API Secret is required.");
 
     return {
-      type,
+      type: "CEX",
       provider,
       name,
       publicRef: null,
+      config: {
+        apiKey,
+        apiSecret,
+        passphrase: normalizeOptionalText(input.passphrase),
+        apiKeyVersion: normalizeOptionalText(input.apiKeyVersion) ?? "3",
+      },
       encryptedConfig: encryptAssetConfig({
         apiKey,
         apiSecret,
@@ -959,12 +984,91 @@ function validateSourceInput(input: Record<string, unknown>) {
   assert(publicRef, "Wallet address is required.");
 
   return {
-    type,
+    type: "ONCHAIN",
     provider,
     name,
     publicRef,
+    config: {
+      address: publicRef,
+      provider,
+    },
     encryptedConfig: null,
   };
+}
+
+async function assertUniqueAssetSource(
+  userId: number,
+  payload: ReturnType<typeof validateSourceInput>
+) {
+  const duplicate = await queryOne<{ id: number }>(
+    payload.type === "ONCHAIN"
+      ? `
+          select id
+          from asset_sources
+          where user_id = $1
+            and type = $2
+            and provider = $3
+            and lower(coalesce(public_ref, '')) = lower($4)
+          limit 1
+        `
+      : `
+          select id
+          from asset_sources
+          where user_id = $1
+            and type = $2
+            and provider = $3
+            and lower(name) = lower($4)
+          limit 1
+        `,
+    [
+      userId,
+      payload.type,
+      payload.provider,
+      payload.type === "ONCHAIN" ? payload.publicRef : payload.name,
+    ]
+  );
+
+  assert(!duplicate, "A matching asset source already exists.", 409);
+}
+
+async function fetchSourceAssets(payload: ReturnType<typeof validateSourceInput>) {
+  if (payload.type === "CEX") {
+    const adapter = getCexAdapter(payload.provider);
+    if (!adapter) {
+      throw new AssetProviderError(
+        `${payload.provider} CEX sync is not implemented yet.`,
+        "UNKNOWN"
+      );
+    }
+
+    return {
+      balances: mergeDuplicateBalances(await adapter.getBalances(payload.config)),
+      positions: adapter.getPositions ? await adapter.getPositions(payload.config) : [],
+    };
+  }
+
+  const adapter = getOnchainAdapter(payload.provider);
+  if (!adapter) {
+    throw new AssetProviderError(
+      `${payload.provider} on-chain sync is not implemented yet.`,
+      "UNKNOWN"
+    );
+  }
+
+  return {
+    balances: mergeDuplicateBalances(await adapter.getBalances(payload.config)),
+    positions: await adapter.getPositions(payload.config),
+  };
+}
+
+function createSourceSyncFailedError(error: unknown) {
+  const wrapped = new Error(toSyncErrorSummary(error)) as Error & { status?: number };
+  wrapped.status =
+    error instanceof AssetProviderError &&
+    (error.code === "PROVIDER_DOWN" || error.code === "ACCESS_DENIED")
+      ? 502
+      : 400;
+  return wrapped;
 }
 
 export async function createAssetSource(userId: number, input: Record<string, unknown>) {
@@ -973,35 +1077,85 @@ export async function createAssetSource(userId: number, input: Record<string, un
   assert(totalSources < MAX_SOURCES_PER_USER, "Source limit reached.", 400);
 
   const payload = validateSourceInput(input);
-  const createdAt = now();
-  const source = await queryOne<AssetSourceRecord>(
-    `
-      insert into asset_sources (
-        user_id, type, provider, name, public_ref, encrypted_config, status,
-        created_at, updated_at
-      )
-      values ($1, $2, $3, $4, $5, $6, 'PENDING', $7, $7)
-      returning ${SOURCE_FIELDS}
-    `,
-    [
+  await assertUniqueAssetSource(normalizedUserId, payload);
+
+  const startedAt = new Date();
+  let syncedAssets: { balances: NormalizedAssetBalance[]; positions: NormalizedAssetPosition[] };
+  try {
+    syncedAssets = await fetchSourceAssets(payload);
+  } catch (error) {
+    throw createSourceSyncFailedError(error);
+  }
+
+  const finishedAt = new Date();
+  const finishedAtIso = finishedAt.toISOString();
+  let createdSourceId: number | null = null;
+
+  await withTransaction(async (client) => {
+    const source = await client.query<AssetSourceRecord>(
+      `
+        insert into asset_sources (
+          user_id, type, provider, name, public_ref, encrypted_config, status,
+          last_synced_at, last_error, created_at, updated_at
+        )
+        values ($1, $2, $3, $4, $5, $6, 'ACTIVE', $7, null, $7, $7)
+        returning ${SOURCE_FIELDS}
+      `,
+      [
+        normalizedUserId,
+        payload.type,
+        payload.provider,
+        payload.name,
+        payload.publicRef,
+        payload.encryptedConfig,
+        finishedAtIso,
+      ]
+    );
+
+    const createdSource = source.rows[0];
+    assert(createdSource, "Failed to create source.", 500);
+    createdSourceId = createdSource.id;
+
+    await replaceSourceBalances(
+      client,
       normalizedUserId,
-      payload.type,
-      payload.provider,
-      payload.name,
-      payload.publicRef,
-      payload.encryptedConfig,
-      createdAt,
-    ]
-  );
+      createdSource.id,
+      syncedAssets.balances,
+      finishedAtIso
+    );
+    await replaceSourcePositions(
+      client,
+      normalizedUserId,
+      createdSource.id,
+      syncedAssets.positions,
+      finishedAtIso
+    );
+    await client.query(
+      `
+        insert into asset_sync_logs (
+          user_id, source_id, status, balance_count, duration_ms, error_message,
+          started_at, finished_at, created_at
+        )
+        values ($1, $2, 'SUCCESS', $3, $4, null, $5, $6, $6)
+      `,
+      [
+        normalizedUserId,
+        createdSource.id,
+        syncedAssets.balances.length,
+        finishedAt.getTime() - startedAt.getTime(),
+        startedAt.toISOString(),
+        finishedAtIso,
+      ]
+    );
+  });
 
-  assert(source, "Failed to create source.", 500);
-
-  const syncResult = await syncAssetSource(normalizedUserId, source.id);
+  assert(createdSourceId, "Failed to create source.", 500);
+  await captureAssetSnapshot(normalizedUserId);
 
   return {
-    source: await getAssetSource(normalizedUserId, source.id),
+    source: await getAssetSource(normalizedUserId, createdSourceId),
     summary: await getAssetSummary(normalizedUserId),
-    error: syncResult.error,
+    error: null,
   };
 }
 
