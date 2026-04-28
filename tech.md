@@ -429,10 +429,12 @@ lib/assets/
 - `asset_name`
 - `amount`
 - `value_usd`
-- `category`: `SPOT`、`EARN`、`DEFI`、`CASH`、`OTHER`
+- `category`: `SPOT`、`EARN`、`DEFI`、`CASH`、`DETAIL`、`OTHER`
 - `raw_data`
 
 同步时当前实现会先删除该 source 旧余额，再插入本次同步结果。
+
+`DETAIL` 类余额用于保存来源内部明细，不参与 `totalValueUsd` 和 source 总值计算，避免与汇总余额重复计入。
 
 ### 9.4 Asset Position
 
@@ -507,6 +509,8 @@ type OnchainAdapter = {
 };
 ```
 
+所有 adapter 统一输出 `NormalizedAssetBalance` 和 `NormalizedAssetPosition`。余额类别支持 `SPOT`、`EARN`、`DEFI`、`CASH`、`DETAIL`、`OTHER`；仓位类型支持 `LP`、`LENDING`、`BORROWING`、`STAKING`、`FARMING`、`VESTING`、`DEFI`、`OTHER`。
+
 当前 CEX adapter：
 
 - `binance.ts`
@@ -544,6 +548,20 @@ type OnchainAdapter = {
 - 密文包含 `version`、`iv`、`authTag`、`content`
 - 密钥环境变量：`ASSET_CREDENTIAL_ENCRYPTION_KEY`
 - 支持 `base64:<32 bytes>`、`hex:<32 bytes>` 或长度至少 32 的 passphrase
+
+### 9.10 CEX Provider 矩阵
+
+| 交易所 | Adapter | 凭据要求 | 当前范围 |
+| --- | --- | --- | --- |
+| Binance | `binance.ts` | API Key + Secret | 基础余额 |
+| OKX | `okx.ts` | API Key + Secret + Passphrase | 基础余额，包含部分 funding / Earn 估值归并 |
+| Bybit | `bybit.ts` | API Key + Secret | 基础余额 |
+| Bitget | `bitget.ts` | API Key + Secret + Passphrase | 基础余额 |
+| Gate | `gate.ts` | API Key + Secret | 基础余额 |
+| HTX | `htx.ts` | API Key + Secret | 基础余额 |
+| KuCoin | `kucoin.ts` | API Key + Secret + Passphrase + API Key Version | 基础余额 |
+
+用户应创建 read-only API Key。服务端不实现交易、提现、划转或下单能力；adapter 不应把 API Secret、签名 payload 或完整敏感外部响应写入日志。
 
 ## 10. API 设计
 
@@ -738,6 +756,10 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 
 `captureAssetsForAllUsers()` 为 Cron 扫描所有 `ACTIVE`、`FAILED`、`PENDING` 来源，逐个同步，并为受影响用户捕获资产快照。
 
+`createAssetSource()` 会在写入 source 前先调用 adapter 完成首次同步。首次同步失败时返回错误，不保存不可用 source；后续已存在 source 的同步失败会更新该 source 为 `FAILED`，写入 `asset_sync_logs`，并保留错误摘要。
+
+当前手动同步没有严格的服务端节流。UI 会显示 loading 状态，但后续仍需要增加节流、分页或队列化，降低外部 API rate limit 和 Worker 执行时长风险。
+
 ## 12. Cloudflare Workers 部署
 
 ### 12.1 构建与入口
@@ -763,6 +785,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 - Cron：
   - `0 */12 * * *`
   - `0 */4 * * *`
+  - `0 1/4 * * *`
   - `0 2 * * *`
   - `0 14 * * *`
 - observability 配置中 logs 和 traces 均开启持久化，但顶层 `observability.enabled` 当前为 `false`

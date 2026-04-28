@@ -7,4 +7,5 @@ node_modules
 .dev.vars
 storage/*.sqlite
 storage/*.sqlite-*
+cex-dex-service
 !.gitkeep

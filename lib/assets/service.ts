@@ -12,8 +12,12 @@ import type {
   NormalizedAssetPosition,
 } from "@/lib/assets/types";
 import { decryptAssetConfig, encryptAssetConfig } from "@/lib/assets/encryption";
-import { AssetProviderError, getCexAdapter, getOnchainAdapter } from "@/lib/assets/adapters";
-import type { CexConfig, OnchainConfig } from "@/lib/assets/adapters";
+import {
+  AssetProviderError,
+  fetchSourceAssetsFromCexDexService,
+  type CexConfig,
+  type OnchainConfig,
+} from "@/lib/assets/cex-dex-service-client";
 
 const DEFAULT_LIMIT = 20;
 const MAX_PAGE_SIZE = 50;
@@ -539,6 +543,14 @@ async function replaceSourceBalances(
           category, raw_data, updated_at
         )
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        on conflict (source_id, asset_symbol, category)
+        do update set
+          user_id = excluded.user_id,
+          asset_name = excluded.asset_name,
+          amount = excluded.amount,
+          value_usd = excluded.value_usd,
+          raw_data = excluded.raw_data,
+          updated_at = excluded.updated_at
       `,
       [
         userId,
@@ -576,6 +588,16 @@ async function replaceSourcePositions(
           net_value_usd, raw_data, updated_at
         )
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        on conflict (source_id, provider, chain, protocol_id, position_type)
+        do update set
+          user_id = excluded.user_id,
+          protocol_name = excluded.protocol_name,
+          asset_value_usd = excluded.asset_value_usd,
+          debt_value_usd = excluded.debt_value_usd,
+          reward_value_usd = excluded.reward_value_usd,
+          net_value_usd = excluded.net_value_usd,
+          raw_data = excluded.raw_data,
+          updated_at = excluded.updated_at
       `,
       [
         userId,
@@ -1032,32 +1054,15 @@ async function assertUniqueAssetSource(
 }
 
 async function fetchSourceAssets(payload: ReturnType<typeof validateSourceInput>) {
-  if (payload.type === "CEX") {
-    const adapter = getCexAdapter(payload.provider);
-    if (!adapter) {
-      throw new AssetProviderError(
-        `${payload.provider} CEX sync is not implemented yet.`,
-        "UNKNOWN"
-      );
-    }
-
-    return {
-      balances: mergeDuplicateBalances(await adapter.getBalances(payload.config)),
-      positions: adapter.getPositions ? await adapter.getPositions(payload.config) : [],
-    };
-  }
-
-  const adapter = getOnchainAdapter(payload.provider);
-  if (!adapter) {
-    throw new AssetProviderError(
-      `${payload.provider} on-chain sync is not implemented yet.`,
-      "UNKNOWN"
-    );
-  }
+  const result = await fetchSourceAssetsFromCexDexService({
+    type: payload.type,
+    provider: payload.provider,
+    config: payload.config,
+  } as Parameters<typeof fetchSourceAssetsFromCexDexService>[0]);
 
   return {
-    balances: mergeDuplicateBalances(await adapter.getBalances(payload.config)),
-    positions: await adapter.getPositions(payload.config),
+    balances: mergeDuplicateBalances(result.balances),
+    positions: result.positions,
   };
 }
 
@@ -1634,37 +1639,29 @@ export async function syncAssetSource(userId: number, sourceId: number) {
 
   try {
     if (source.type === "CEX") {
-      const adapter = getCexAdapter(source.provider);
-      if (!adapter) {
-        throw new AssetProviderError(
-          `${source.provider} CEX sync is not implemented yet.`,
-          "UNKNOWN"
-        );
-      }
-
       const config = decryptAssetConfig(source.encryptedConfig);
       assert(config, "Source configuration is missing.", 400);
 
-      balances = await adapter.getBalances(config);
-      positions = adapter.getPositions ? await adapter.getPositions(config) : [];
+      const result = await fetchSourceAssetsFromCexDexService({
+        type: "CEX",
+        provider: source.provider,
+        config,
+      });
+      balances = result.balances;
+      positions = result.positions;
     } else {
-      const adapter = getOnchainAdapter(source.provider);
-      if (!adapter) {
-        throw new AssetProviderError(
-          `${source.provider} on-chain sync is not implemented yet.`,
-          "UNKNOWN"
-        );
-      }
-
       assert(source.publicRef, "Wallet address is missing.", 400);
 
-      const config = {
-        address: source.publicRef,
+      const result = await fetchSourceAssetsFromCexDexService({
+        type: "ONCHAIN",
         provider: source.provider,
-      };
-
-      balances = await adapter.getBalances(config);
-      positions = await adapter.getPositions(config);
+        config: {
+          address: source.publicRef,
+          provider: source.provider,
+        },
+      });
+      balances = result.balances;
+      positions = result.positions;
     }
 
     balances = mergeDuplicateBalances(balances);

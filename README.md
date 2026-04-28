@@ -1,25 +1,48 @@
 # Earn Compass
 
-Earn Compass 是一个用于管理 CeFi / DeFi 收益型投资仓位的 Next.js 全栈应用。它帮助用户记录投资本金、APR、收益、到期时间和仓位状态，并通过 Dashboard、Analytics 和每日快照追踪组合表现。
+Earn Compass 是一个用于管理 CeFi / DeFi 收益型投资仓位和个人资产净值的 Next.js 全栈应用。它帮助用户记录投资本金、APR、收益、到期时间和仓位状态，并通过 Dashboard、Assets、Analytics 和每日快照追踪组合表现。
 
 当前代码中的实际产品形态是：
 
-- 未登录用户进入只读预览模式，浏览内置示例投资和示例分析数据
+- 未登录用户进入只读预览模式，浏览内置示例投资、示例资产和示例分析数据
 - 登录用户通过远程 API 管理自己的真实投资记录
+- 登录用户可以接入 CEX 只读 API、链上公开地址和手动资产，查看总资产、分布、趋势和同步健康状态
 - 支持邮箱密码注册登录，以及 Google / GitHub OAuth
-- 支持 Dashboard、Analytics、Settings、Login、Register 页面
-- 支持 PostgreSQL 数据持久化、组合快照、自动结算到期投资、到期提醒邮件和 Cloudflare Cron
+- 支持 Dashboard、Assets、Analytics、Settings、Login、Register 页面
+- 支持 PostgreSQL 数据持久化、组合快照、资产快照、自动结算到期投资、到期提醒邮件和 Cloudflare Cron
 - 代码中仍保留 Dexie / IndexedDB 本地仓库和 `storageMode` 抽象，但成熟主路径是登录后的远程数据模式
 
 ## 功能概览
 
 - 投资记录管理：新增、编辑、删除、提前结束
 - 收益总览：活跃本金、累计收益、日/周/月/年收益、加权 APR
+- 资产聚合：CEX 只读 API、OKX Web3 链上地址、手动资产、总资产摘要、来源/类别分布、Top 资产、余额和 DeFi 仓位明细
 - 分析图表：收入概览、真实快照趋势、收益趋势、APR 分布、项目占比、组合波动
 - 快照系统：手动捕获当前用户快照；Cron 每 12 小时为远程用户捕获快照
+- 资产快照：资产同步或手动资产变更后捕获资产净值快照；Cron 每 4 小时同步资产来源
 - 到期处理：Cron 自动把已到期 `ONGOING` 投资更新为 `ENDED`
 - 邮件提醒：Cron 每天 10:00 和 22:00（UTC+8）向有活跃投资的活跃用户发送到期提醒，24 小时内到期项目优先展示
 - 设置中心：个人资料、时区、语言、显示币种、通知开关占位、JSON 导出、清空数据
+
+## Assets 模块
+
+Assets 用于聚合登录用户的总资产净值，和 Investment 模块保持独立：Investment 记录收益产品的本金、APR、收益和到期；Assets 记录资产余额、DeFi / 结构化仓位、手动资产、同步状态和资产快照。
+
+当前支持的资产来源：
+
+- CEX：Binance、OKX、Bybit、Bitget、Gate、HTX、KuCoin
+- On-chain：OKX Web3 provider，支持 `AUTO`、`OKX_EVM`、`OKX_SOLANA`、`OKX_SUI`、`OKX_TRON`、`OKX_BITCOIN`、`OKX_TON` 等 provider alias
+- 地址范围：EVM、Solana、Sui、Tron、Bitcoin 和 TON 地址
+- 手动资产：`CASH`、`STOCK`、`FUND`、`TOKEN`、`REAL_ESTATE`、`OTHER`
+
+重要边界：
+
+- CEX 凭据只用于只读余额查询，并通过 `ASSET_CREDENTIAL_ENCRYPTION_KEY` 加密保存
+- On-chain 来源只保存公开地址，不保存私钥、助记词或签名材料
+- 单用户最多 10 个资产来源、50 个未删除手动资产
+- 资产来源删除会删除该来源余额、仓位和同步日志；手动资产删除是软删除
+- 资产总览使用 USD 净值口径，显示层再按用户显示币种换算
+- 当前不执行交易、签名、提现、划转、资产归集、NFT 跟踪、税务报表或复杂成本价追踪
 
 ## 技术栈
 
@@ -86,7 +109,7 @@ openssl rand -base64 32
 
 把输出保存为 `base64:<output>`。这个值只放在本地 `.env` 或 Cloudflare Secret，不要提交到仓库。
 
-`OKX_WEB3_*` 用于 Assets 模块的 on-chain 同步。当前 OKX Web3 provider 会同步钱包 token 余额和 DeFi protocol 仓位，支持 EVM、Solana、Sui、Tron、Bitcoin 和 TON 地址。
+`OKX_WEB3_*` 用于 Assets 模块的 on-chain 同步。当前 OKX Web3 provider 会同步钱包 token 余额和 DeFi protocol 仓位，支持 EVM、Solana、Sui、Tron、Bitcoin 和 TON 地址。`OKX_WEB3_PROJECT_ID` 按 OKX app 要求可选。
 
 如果使用 Wrangler 本地预览，也从 [.env.example](/Users/baiwei/Desktop/berry/earn/cefidefi/.env.example:1) 复制一份为 `.dev.vars`，并按预览环境填入真实值。不要使用或提交 `var.env` / `vars.env`；本项目只维护 `.env.example` 这一份环境变量模板，本地私密配置放在 `.env` 或 `.dev.vars`。
 
@@ -131,14 +154,16 @@ npm run start
 
 ```text
 app/                     Next.js 页面、布局与 API routes
-app/api/                 Auth、Investments、Analytics、Cron、Exchange Rate API
+app/api/                 Auth、Investments、Assets、Analytics、Cron、Exchange Rate API
 components/              页面组件与共享 UI
 components/dashboard/    Dashboard 表格、筛选、表单、统计卡片
+components/assets/       Assets 摘要、图表、来源、手动资产、余额、健康状态组件
 components/analytics/    Analytics 图表与摘要组件
 components/layout/       导航与布局组件
 components/ui/           本地 UI primitive wrappers
 hooks/                   客户端 hooks
-lib/                     鉴权、用户、投资、计算、快照、邮件、i18n、存储
+lib/                     鉴权、用户、投资、资产、计算、快照、邮件、i18n、存储
+lib/assets/              Assets 服务、类型、预览数据、凭据加密和 CEX / on-chain adapters
 lib/storage/             Dexie 客户端与本地/远程 repository 抽象
 db/                      PostgreSQL schema
 store/                   全局 app store
@@ -163,6 +188,10 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 - 未登录态使用 [lib/preview-data.ts](/Users/baiwei/Desktop/berry/earn/cefidefi/lib/preview-data.ts:1) 中的只读示例数据
 - 单条删除为软删除；设置页“清空全部数据”当前会硬删除当前用户全部投资记录
 - 快照和到期提醒任务会写入 `scheduled_job_logs`
+- Assets API 通过 `requireSession()` 按用户隔离，不返回 `encrypted_config`、API Secret、签名 payload 或加密密钥
+- Assets 页面首屏只请求 `/api/assets/summary`；趋势、来源、手动资产、余额、仓位和健康状态按 tab 懒加载
+- 资产同步成功后覆盖该来源当前余额和仓位，写入 `asset_sync_logs`，并捕获当前用户资产快照
+- 资产同步失败会记录摘要错误；手动同步当前没有严格的服务端节流，需要避免重复触发外部 API rate limit
 
 ## API 概览
 
@@ -182,8 +211,30 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 - `DELETE /api/investments`
 - `GET /api/analytics/snapshots`
 - `POST /api/analytics/snapshots`
+- `GET /api/assets`
+- `GET /api/assets/summary`
+- `GET /api/assets/sources`
+- `POST /api/assets/sources`
+- `GET /api/assets/sources/:id`
+- `PATCH /api/assets/sources/:id`
+- `DELETE /api/assets/sources/:id`
+- `POST /api/assets/sources/:id/sync`
+- `GET /api/assets/sources/:id/balances`
+- `GET /api/assets/sources/:id/positions`
+- `POST /api/assets/sync`
+- `GET /api/assets/balances`
+- `GET /api/assets/positions`
+- `GET /api/assets/manual`
+- `POST /api/assets/manual`
+- `PATCH /api/assets/manual/:id`
+- `DELETE /api/assets/manual/:id`
+- `GET /api/assets/snapshots`
+- `POST /api/assets/snapshots`
+- `GET /api/assets/health`
 - `GET /api/exchange-rate`
+- `GET /api/diagnostics/egress`
 - `GET /api/cron/snapshots`
+- `GET /api/cron/assets/sync`
 - `GET /api/cron/investments/settle`
 - `GET /api/cron/investments/expiry-reminders`
 
@@ -208,6 +259,10 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 - `GOOGLE_CLIENT_SECRET`
 - `GITHUB_CLIENT_ID`
 - `GITHUB_CLIENT_SECRET`
+- `OKX_WEB3_API_KEY`
+- `OKX_WEB3_API_SECRET`
+- `OKX_WEB3_PASSPHRASE`
+- `OKX_WEB3_PROJECT_ID`
 
 Cloudflare Cron 当前配置：
 
@@ -223,4 +278,5 @@ Cron 时间按 UTC 解释。`Asia/Shanghai` / UTC+8 下，快照采集为每天 
 
 - [prd.md](/Users/baiwei/Desktop/berry/earn/cefidefi/prd.md:1)
 - [tech.md](/Users/baiwei/Desktop/berry/earn/cefidefi/tech.md:1)
+- [assets.md](/Users/baiwei/Desktop/berry/earn/cefidefi/assets.md:1)
 - [DEPLOY.md](/Users/baiwei/Desktop/berry/earn/cefidefi/DEPLOY.md:1)
