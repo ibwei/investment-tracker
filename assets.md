@@ -654,7 +654,7 @@ type CexAdapter = {
 | Bybit | `bybit.ts` | 基础余额 | API Key + Secret |
 | Bitget | `bitget.ts` | 基础余额 | API Key + Secret + Passphrase |
 | Gate | `gate.ts` | 基础余额 | API Key + Secret |
-| HTX | `htx.ts` | 基础余额 | API Key + Secret |
+| HTX | `htx.ts` | 基础余额，包含 `deposit-earning` 理财账户和 Earn 估值补差 | API Key + Secret |
 | KuCoin | `kucoin.ts` | 基础余额 | API Key + Secret + Passphrase + API Key Version |
 
 ### 11.4 On-chain Adapter

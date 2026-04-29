@@ -558,7 +558,7 @@ type OnchainAdapter = {
 | Bybit | `bybit.ts` | API Key + Secret | 基础余额 |
 | Bitget | `bitget.ts` | API Key + Secret + Passphrase | 基础余额 |
 | Gate | `gate.ts` | API Key + Secret | 基础余额 |
-| HTX | `htx.ts` | API Key + Secret | 基础余额 |
+| HTX | `htx.ts` | API Key + Secret | 基础余额，包含 `deposit-earning` 理财账户和 Earn 估值补差 |
 | KuCoin | `kucoin.ts` | API Key + Secret + Passphrase + API Key Version | 基础余额 |
 
 用户应创建 read-only API Key。服务端不实现交易、提现、划转或下单能力；adapter 不应把 API Secret、签名 payload 或完整敏感外部响应写入日志。
