@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { setSessionCookie } from "@/lib/auth";
+import { assertSameOriginRequest, setSessionCookie } from "@/lib/auth";
 import { registerUser } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +18,7 @@ function handleRouteError(error) {
 
 export async function POST(request) {
   try {
+    assertSameOriginRequest(request);
     const body = await request.json();
     const user = await registerUser(body);
     await setSessionCookie(user);

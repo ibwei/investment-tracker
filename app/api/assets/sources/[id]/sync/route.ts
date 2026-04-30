@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSameOriginSession } from "@/lib/auth";
 import { syncAssetSource } from "@/lib/assets/service";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +13,11 @@ function handleRouteError(error: any) {
 }
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     const { id } = await context.params;
     return NextResponse.json(await syncAssetSource(session.userId, Number(id)));
   } catch (error) {

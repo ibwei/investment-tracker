@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import {
   clearAllInvestments,
   createInvestment,
@@ -46,7 +46,7 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     const body = await request.json();
     const record = await createInvestment(session.userId, body);
     const snapshot = await includeCreatedRecordInSnapshot(
@@ -64,9 +64,9 @@ export async function POST(request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     return NextResponse.json({
       snapshot: await clearAllInvestments(session.userId)
     });

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import { captureAssetSnapshot, listAssetSnapshots } from "@/lib/assets/service";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +28,9 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     return NextResponse.json({
       snapshot: await captureAssetSnapshot(session.userId),
     });

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSameOriginSession } from "@/lib/auth";
 import {
   finishInvestment,
   getDashboardSnapshot
@@ -30,7 +30,7 @@ function parseId(rawId) {
 
 export async function POST(request, context) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     const id = parseId((await context.params).id);
     const body = await request.json();
     const record = await finishInvestment(session.userId, id, body);

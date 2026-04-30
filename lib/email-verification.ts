@@ -1,5 +1,6 @@
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 
+import { getAuthSecret } from "@/lib/auth";
 import { sendEmail } from "@/lib/email";
 import { execute, queryOne, withTransaction } from "@/lib/db";
 
@@ -30,13 +31,9 @@ function now() {
   return new Date().toISOString();
 }
 
-function getVerificationSecret() {
-  return process.env.AUTH_SECRET || "earn-compass-dev-secret";
-}
-
 function hashCode(email, code) {
   return createHash("sha256")
-    .update(`${email}:${code}:${getVerificationSecret()}`)
+    .update(`${email}:${code}:${getAuthSecret()}`)
     .digest("hex");
 }
 

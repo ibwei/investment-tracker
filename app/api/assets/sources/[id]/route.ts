@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import {
   deleteAssetSource,
   getAssetSource,
@@ -36,7 +36,7 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     const { id } = await context.params;
     return NextResponse.json(
       await updateAssetSource(session.userId, Number(id), await request.json())
@@ -47,11 +47,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     const { id } = await context.params;
     return NextResponse.json(await deleteAssetSource(session.userId, Number(id)));
   } catch (error) {

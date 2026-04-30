@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import { createManualAsset, listManualAssets } from "@/lib/assets/service";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     return NextResponse.json(await createManualAsset(session.userId, await request.json()));
   } catch (error) {
     return handleRouteError(error);

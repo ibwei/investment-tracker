@@ -11,11 +11,21 @@ function createError(message, status = 400) {
 }
 
 function getBaseUrl(request) {
-  return (
-    process.env.APP_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    new URL(request.url).origin
-  );
+  const configured = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+
+  if (configured) {
+    const url = new URL(configured);
+    if (!["http:", "https:"].includes(url.protocol)) {
+      throw createError("Configured app URL is invalid.", 500);
+    }
+    return url.origin;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw createError("APP_URL is required in production.", 500);
+  }
+
+  return new URL(request.url).origin;
 }
 
 function getProviderEnv(provider) {
@@ -176,10 +186,6 @@ async function exchangeGoogleCode(request, code) {
 }
 
 async function resolveGithubEmail(accessToken, fallbackEmail) {
-  if (fallbackEmail) {
-    return fallbackEmail;
-  }
-
   const response = await fetch("https://api.github.com/user/emails", {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -190,8 +196,10 @@ async function resolveGithubEmail(accessToken, fallbackEmail) {
   });
 
   const emails = await parseJsonResponse(response, "OAuth sign in failed.");
+  const normalizedFallback = fallbackEmail ? String(fallbackEmail).toLowerCase() : null;
   const primaryVerified = Array.isArray(emails)
-    ? emails.find((item) => item.primary && item.verified) ||
+    ? emails.find((item) => item.verified && String(item.email).toLowerCase() === normalizedFallback) ||
+      emails.find((item) => item.primary && item.verified) ||
       emails.find((item) => item.verified)
     : null;
 

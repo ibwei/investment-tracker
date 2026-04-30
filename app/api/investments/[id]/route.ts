@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSameOriginSession } from "@/lib/auth";
 import {
   getDashboardSnapshot,
   softDeleteInvestment,
@@ -31,7 +31,7 @@ function parseId(rawId) {
 
 export async function PATCH(request, context) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     const id = parseId((await context.params).id);
     const body = await request.json();
     const record = await updateInvestment(session.userId, id, body);
@@ -46,7 +46,7 @@ export async function PATCH(request, context) {
 
 export async function DELETE(request, context) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     const id = parseId((await context.params).id);
     const body = await request.json();
     await softDeleteInvestment(session.userId, id, body?.confirmationText);

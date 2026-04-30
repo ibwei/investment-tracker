@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { assertSameOriginRequest } from "@/lib/auth";
 import { sendRegistrationVerificationCode } from "@/lib/email-verification";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ function handleRouteError(error) {
 
 export async function POST(request) {
   try {
+    assertSameOriginRequest(request);
     const body = await request.json();
     return NextResponse.json(await sendRegistrationVerificationCode(body));
   } catch (error) {

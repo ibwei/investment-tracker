@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { assertSameOriginRequest, getSession } from "@/lib/auth";
 import { getUserById, updateUserProfile } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +33,7 @@ export async function GET() {
 
 export async function PATCH(request) {
   try {
+    assertSameOriginRequest(request);
     const session = await getSession();
     if (!session) {
       return NextResponse.json(

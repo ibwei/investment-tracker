@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import {
   captureUserSnapshots,
   listPortfolioSnapshots
@@ -33,9 +33,9 @@ export async function GET(request) {
   }
 }
 
-export async function POST() {
+export async function POST(request) {
   try {
-    const session = await requireSession();
+    const session = await requireSameOriginSession(request);
     return NextResponse.json({
       snapshot: await captureUserSnapshots(session.userId)
     });
