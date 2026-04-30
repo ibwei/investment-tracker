@@ -23,6 +23,7 @@ const DEFAULT_LIMIT = 20;
 const MAX_PAGE_SIZE = 50;
 const MAX_SOURCES_PER_USER = 10;
 const MAX_MANUAL_ASSETS_PER_USER = 50;
+const SYNC_ALL_CONCURRENCY = 3;
 const VALID_BALANCE_CATEGORIES = new Set<NormalizedAssetBalance["category"]>([
   "SPOT",
   "EARN",
@@ -405,6 +406,75 @@ function summarizeTopAssets(
     .slice(0, 5);
 }
 
+type SummaryTopAssetGroup = {
+  label: string;
+  category: string;
+  sourceType: "CEX" | "ONCHAIN" | "MANUAL";
+  sourceId: number | null;
+  sourceName: string;
+  categories: string[];
+  sourceTypes: Array<"CEX" | "ONCHAIN" | "MANUAL">;
+  valueUsd: number;
+  balanceCount: number;
+  positionCount: number;
+  manualAssetCount: number;
+};
+
+function addSummaryTopAssetGroup(
+  groups: Map<string, SummaryTopAssetGroup>,
+  key: string,
+  input: {
+    label: string;
+    sourceId: number | null;
+    sourceName: string;
+    sourceType: "CEX" | "ONCHAIN" | "MANUAL";
+    valueUsd: number;
+    categories: string[];
+    balanceCount?: number;
+    positionCount?: number;
+    manualAssetCount?: number;
+  }
+) {
+  if (input.valueUsd <= 0) {
+    return;
+  }
+
+  const group = groups.get(key) ?? {
+    label: input.label,
+    category: "",
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    sourceName: input.sourceName,
+    categories: [],
+    sourceTypes: [input.sourceType],
+    valueUsd: 0,
+    balanceCount: 0,
+    positionCount: 0,
+    manualAssetCount: 0,
+  };
+
+  group.valueUsd += input.valueUsd;
+  group.balanceCount += input.balanceCount ?? 0;
+  group.positionCount += input.positionCount ?? 0;
+  group.manualAssetCount += input.manualAssetCount ?? 0;
+  for (const category of input.categories) {
+    if (category && !group.categories.includes(category)) {
+      group.categories.push(category);
+    }
+  }
+  groups.set(key, group);
+}
+
+function finalizeSummaryTopAssetGroups(groups: Map<string, SummaryTopAssetGroup>) {
+  return Array.from(groups.values())
+    .map((item) => ({
+      ...item,
+      category: item.categories.join(" / "),
+    }))
+    .sort((left, right) => right.valueUsd - left.valueUsd)
+    .slice(0, 5);
+}
+
 async function countActiveSources(userId: number) {
   const result = await queryOne<{ count: string }>(
     `select count(*)::text as count from asset_sources where user_id = $1`,
@@ -465,6 +535,29 @@ function isCountedBalance(item: { category?: string | null }) {
 
 function countedBalanceValue(item: { category?: string | null; valueUsd?: number | string | null }) {
   return isCountedBalance(item) ? Number(item.valueUsd ?? 0) : 0;
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>
+) {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function runNext() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await worker(items[currentIndex]);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => runNext())
+  );
+
+  return results;
 }
 
 async function findSource(userId: number, sourceId: number) {
@@ -722,46 +815,140 @@ export async function listAssetSnapshots(
 
 export async function getAssetSummary(userId: number): Promise<AssetSummaryResponse> {
   const normalizedUserId = normalizeUserId(userId);
-  const { sources, balances, positions, manualAssets, snapshots } = await withConnection(
+  const {
+    sourceStats,
+    sourceTypeRows,
+    categoryRows,
+    topBalanceRows,
+    topPositionRows,
+    manualSummary,
+    snapshots,
+  } = await withConnection(
     async (client) => {
-      const sourcesResult = await client.query<AssetSourceRecord>(
-      `
-        select ${SOURCE_FIELDS}
-        from asset_sources
-        where user_id = $1
-        order by updated_at desc, id desc
-      `,
-      [normalizedUserId]
-      );
-      const balancesResult = await client.query<AssetBalanceRecord>(
+      const sourceStatsResult = await client.query<{
+        sourceCount: string;
+        failedSourceCount: string;
+        lastSyncedAt: string | null;
+      }>(
         `
-          select ${BALANCE_FIELDS}
-          from asset_balances
-          join asset_sources on asset_sources.id = asset_balances.source_id
-          where asset_balances.user_id = $1
-          order by value_usd desc, asset_balances.id desc
+          select
+            count(*)::text as "sourceCount",
+            count(*) filter (where status = 'FAILED')::text as "failedSourceCount",
+            max(last_synced_at) as "lastSyncedAt"
+          from asset_sources
+          where user_id = $1
         `,
         [normalizedUserId]
       );
-      const positionsResult = await client.query<AssetPositionRecord>(
+
+      const sourceTypeResult = await client.query<{ sourceType: string; valueUsd: string }>(
         `
-          select ${POSITION_FIELDS}
+          select source_type as "sourceType", sum(value_usd)::text as "valueUsd"
+          from (
+            select asset_sources.type as source_type, asset_balances.value_usd
+            from asset_balances
+            join asset_sources on asset_sources.id = asset_balances.source_id
+            where asset_balances.user_id = $1 and asset_balances.category <> 'DETAIL'
+            union all
+            select asset_sources.type as source_type, asset_positions.net_value_usd as value_usd
+            from asset_positions
+            join asset_sources on asset_sources.id = asset_positions.source_id
+            where asset_positions.user_id = $1
+            union all
+            select 'MANUAL' as source_type, manual_assets.value_usd
+            from manual_assets
+            where manual_assets.user_id = $1 and manual_assets.is_deleted = false
+          ) totals
+          group by source_type
+        `,
+        [normalizedUserId]
+      );
+
+      const categoryResult = await client.query<{ category: string; valueUsd: string }>(
+        `
+          select category, sum(value_usd)::text as "valueUsd"
+          from (
+            select asset_balances.category, asset_balances.value_usd
+            from asset_balances
+            where asset_balances.user_id = $1 and asset_balances.category <> 'DETAIL'
+            union all
+            select asset_positions.position_type as category, asset_positions.net_value_usd as value_usd
+            from asset_positions
+            where asset_positions.user_id = $1
+            union all
+            select manual_assets.type as category, manual_assets.value_usd
+            from manual_assets
+            where manual_assets.user_id = $1 and manual_assets.is_deleted = false
+          ) totals
+          group by category
+        `,
+        [normalizedUserId]
+      );
+
+      const topBalanceResult = await client.query<{
+        sourceId: number;
+        sourceName: string;
+        sourceType: "CEX" | "ONCHAIN";
+        valueUsd: string;
+        categories: string[];
+        balanceCount: string;
+      }>(
+        `
+          select
+            asset_sources.id as "sourceId",
+            asset_sources.name as "sourceName",
+            asset_sources.type as "sourceType",
+            sum(asset_balances.value_usd)::text as "valueUsd",
+            array_remove(array_agg(distinct asset_balances.category), null) as categories,
+            count(*)::text as "balanceCount"
+          from asset_balances
+          join asset_sources on asset_sources.id = asset_balances.source_id
+          where asset_balances.user_id = $1 and asset_balances.category <> 'DETAIL'
+          group by asset_sources.id, asset_sources.name, asset_sources.type
+        `,
+        [normalizedUserId]
+      );
+
+      const topPositionResult = await client.query<{
+        sourceId: number;
+        sourceName: string;
+        sourceType: "CEX" | "ONCHAIN";
+        valueUsd: string;
+        categories: string[];
+        positionCount: string;
+      }>(
+        `
+          select
+            asset_sources.id as "sourceId",
+            asset_sources.name as "sourceName",
+            asset_sources.type as "sourceType",
+            sum(asset_positions.net_value_usd)::text as "valueUsd",
+            array_remove(array_agg(distinct asset_positions.position_type), null) as categories,
+            count(*)::text as "positionCount"
           from asset_positions
           join asset_sources on asset_sources.id = asset_positions.source_id
           where asset_positions.user_id = $1
-          order by net_value_usd desc, asset_positions.id desc
+          group by asset_sources.id, asset_sources.name, asset_sources.type
         `,
         [normalizedUserId]
       );
-      const manualAssetsResult = await client.query<ManualAssetRecord>(
+
+      const manualSummaryResult = await client.query<{
+        valueUsd: string | null;
+        manualAssetCount: string;
+        categories: string[] | null;
+      }>(
         `
-          select ${MANUAL_FIELDS}
+          select
+            coalesce(sum(value_usd), 0)::text as "valueUsd",
+            count(*)::text as "manualAssetCount",
+            array_remove(array_agg(distinct type), null) as categories
           from manual_assets
           where user_id = $1 and is_deleted = false
-          order by updated_at desc, id desc
         `,
         [normalizedUserId]
       );
+
       const snapshotsResult = await client.query<AssetSnapshotRecord>(
         `
           select ${SNAPSHOT_FIELDS}
@@ -774,63 +961,68 @@ export async function getAssetSummary(userId: number): Promise<AssetSummaryRespo
       );
 
       return {
-        sources: sourcesResult.rows,
-        balances: balancesResult.rows,
-        positions: positionsResult.rows,
-        manualAssets: manualAssetsResult.rows,
+        sourceStats: sourceStatsResult.rows[0],
+        sourceTypeRows: sourceTypeResult.rows,
+        categoryRows: categoryResult.rows,
+        topBalanceRows: topBalanceResult.rows,
+        topPositionRows: topPositionResult.rows,
+        manualSummary: manualSummaryResult.rows[0],
         snapshots: snapshotsResult.rows,
       };
     }
   );
 
-  const totalValueUsd =
-    balances.reduce((sum, item) => sum + countedBalanceValue(item), 0) +
-    positions.reduce((sum, item) => sum + Number(item.netValueUsd ?? 0), 0) +
-    manualAssets.reduce((sum, item) => sum + Number(item.valueUsd ?? 0), 0);
-  const previousTotal = Number(snapshots[1]?.totalValueUsd ?? snapshots[0]?.totalValueUsd ?? totalValueUsd);
-  const changeUsd = totalValueUsd - previousTotal;
-  const changePercent = previousTotal > 0 ? (changeUsd / previousTotal) * 100 : 0;
-  const lastSyncedAt = sources
-    .map((item) => item.lastSyncedAt)
-    .filter(Boolean)
-    .sort()
-    .at(-1) ?? null;
   const sourceTypeTotals = { CEX: 0, ONCHAIN: 0, MANUAL: 0 } as Record<
     "CEX" | "ONCHAIN" | "MANUAL",
     number
   >;
-  const categoryTotals = new Map<string, number>();
-
-  for (const item of balances) {
-    if (!isCountedBalance(item)) {
-      continue;
+  for (const row of sourceTypeRows) {
+    const sourceType = row.sourceType as "CEX" | "ONCHAIN" | "MANUAL";
+    if (sourceType in sourceTypeTotals) {
+      sourceTypeTotals[sourceType] = Number(row.valueUsd ?? 0);
     }
-
-    if (item.sourceType) {
-      sourceTypeTotals[item.sourceType] += Number(item.valueUsd ?? 0);
-    }
-    categoryTotals.set(
-      item.category,
-      Number(categoryTotals.get(item.category) ?? 0) + Number(item.valueUsd ?? 0)
-    );
   }
 
-  for (const item of positions) {
-    if (item.sourceType) {
-      sourceTypeTotals[item.sourceType] += Number(item.netValueUsd ?? 0);
-    }
-    categoryTotals.set(
-      item.positionType,
-      Number(categoryTotals.get(item.positionType) ?? 0) + Number(item.netValueUsd ?? 0)
-    );
+  const totalValueUsd = Object.values(sourceTypeTotals).reduce((sum, valueUsd) => sum + valueUsd, 0);
+  const previousTotal = Number(snapshots[1]?.totalValueUsd ?? snapshots[0]?.totalValueUsd ?? totalValueUsd);
+  const changeUsd = totalValueUsd - previousTotal;
+  const changePercent = previousTotal > 0 ? (changeUsd / previousTotal) * 100 : 0;
+  const topAssetGroups = new Map<string, SummaryTopAssetGroup>();
+
+  for (const row of topBalanceRows) {
+    addSummaryTopAssetGroup(topAssetGroups, `source:${row.sourceId}`, {
+      label: row.sourceName ?? "Unknown source",
+      sourceId: row.sourceId,
+      sourceName: row.sourceName ?? "Unknown source",
+      sourceType: row.sourceType ?? "CEX",
+      valueUsd: Number(row.valueUsd ?? 0),
+      categories: row.categories ?? [],
+      balanceCount: Number(row.balanceCount ?? 0),
+    });
   }
 
-  for (const item of manualAssets) {
-    sourceTypeTotals.MANUAL += Number(item.valueUsd ?? 0);
-    categoryTotals.set(
-      item.type,
-      Number(categoryTotals.get(item.type) ?? 0) + Number(item.valueUsd ?? 0)
-    );
+  for (const row of topPositionRows) {
+    addSummaryTopAssetGroup(topAssetGroups, `source:${row.sourceId}`, {
+      label: row.sourceName ?? "Unknown source",
+      sourceId: row.sourceId,
+      sourceName: row.sourceName ?? "Unknown source",
+      sourceType: row.sourceType ?? "ONCHAIN",
+      valueUsd: Number(row.valueUsd ?? 0),
+      categories: row.categories ?? [],
+      positionCount: Number(row.positionCount ?? 0),
+    });
+  }
+
+  if (manualSummary && Number(manualSummary.valueUsd ?? 0) > 0) {
+    addSummaryTopAssetGroup(topAssetGroups, "manual", {
+      label: "Manual",
+      sourceId: null,
+      sourceName: "Manual",
+      sourceType: "MANUAL",
+      valueUsd: Number(manualSummary.valueUsd ?? 0),
+      categories: manualSummary.categories ?? [],
+      manualAssetCount: Number(manualSummary.manualAssetCount ?? 0),
+    });
   }
 
   return {
@@ -838,24 +1030,24 @@ export async function getAssetSummary(userId: number): Promise<AssetSummaryRespo
       totalValueUsd,
       changeUsd,
       changePercent,
-      sourceCount: sources.length,
-      manualAssetCount: manualAssets.length,
-      failedSourceCount: sources.filter((item) => item.status === "FAILED").length,
-      lastSyncedAt,
+      sourceCount: Number(sourceStats?.sourceCount ?? 0),
+      manualAssetCount: Number(manualSummary?.manualAssetCount ?? 0),
+      failedSourceCount: Number(sourceStats?.failedSourceCount ?? 0),
+      lastSyncedAt: sourceStats?.lastSyncedAt ?? null,
       snapshotDate: snapshots[0]?.snapshotDate ?? null,
     },
     sourceTypeBreakdown: buildSourceTypeBreakdown(sourceTypeTotals, totalValueUsd),
     categoryBreakdown: buildCategoryBreakdown(
-      Array.from(categoryTotals.entries()).map(([category, valueUsd]) => ({
-        category,
-        valueUsd,
+      categoryRows.map((row) => ({
+        category: row.category,
+        valueUsd: Number(row.valueUsd ?? 0),
       })),
       totalValueUsd
     ),
-    topAssets: summarizeTopAssets(balances, positions, manualAssets),
+    topAssets: finalizeSummaryTopAssetGroups(topAssetGroups),
     healthSummary: {
-      hasIssues: sources.some((item) => item.status === "FAILED"),
-      issueCount: sources.filter((item) => item.status === "FAILED").length,
+      hasIssues: Number(sourceStats?.failedSourceCount ?? 0) > 0,
+      issueCount: Number(sourceStats?.failedSourceCount ?? 0),
     },
     meta: {
       generatedAt: now(),
@@ -1625,7 +1817,13 @@ function mergeDuplicateBalances(balances: NormalizedAssetBalance[]) {
   return Array.from(merged.values());
 }
 
-export async function syncAssetSource(userId: number, sourceId: number) {
+export async function syncAssetSource(
+  userId: number,
+  sourceId: number,
+  options: { includeSummary?: boolean; captureSnapshot?: boolean } = {}
+) {
+  const includeSummary = options.includeSummary ?? true;
+  const shouldCaptureSnapshot = options.captureSnapshot ?? true;
   const normalizedUserId = normalizeUserId(userId);
   const normalizedSourceId = Number(sourceId);
   const source = await findSyncSource(normalizedUserId, normalizedSourceId);
@@ -1709,11 +1907,13 @@ export async function syncAssetSource(userId: number, sourceId: number) {
     );
   });
 
-  await captureAssetSnapshot(normalizedUserId);
+  if (shouldCaptureSnapshot) {
+    await captureAssetSnapshot(normalizedUserId);
+  }
 
   return {
     source: await getAssetSource(normalizedUserId, normalizedSourceId),
-    summary: await getAssetSummary(normalizedUserId),
+    summary: includeSummary ? await getAssetSummary(normalizedUserId) : undefined,
     error: errorMessage,
   };
 }
@@ -1730,9 +1930,15 @@ export async function syncAllAssetSources(userId: number) {
     [normalizedUserId]
   );
 
-  const results = [];
-  for (const source of sources) {
-    results.push(await syncAssetSource(normalizedUserId, source.id));
+  const results = await runWithConcurrency(sources, SYNC_ALL_CONCURRENCY, (source) =>
+    syncAssetSource(normalizedUserId, source.id, {
+      captureSnapshot: false,
+      includeSummary: false,
+    })
+  );
+
+  if (sources.length > 0) {
+    await captureAssetSnapshot(normalizedUserId);
   }
 
   return {

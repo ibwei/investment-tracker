@@ -118,12 +118,6 @@ export function TopAssetsList({
     setLoadingSource(sourceKey);
 
     try {
-      const syncPayload = await requestJson<SourceSyncResponse>(
-        `/api/assets/sources/${source.sourceId}/sync`,
-        {
-          method: "POST",
-        }
-      );
       const [balancePayload, positionPayload] = await Promise.all([
         requestJson<{ balances: AssetBalanceRecord[] }>(
           `/api/assets/balances?sourceId=${source.sourceId}&limit=50&offset=0&sort=valueUsd.desc`
@@ -141,9 +135,38 @@ export function TopAssetsList({
           syncedAt: new Date().toISOString(),
         },
       }));
+    } catch (error: any) {
+      toast.error(error?.message ?? t("assets.topAssets.loadFailed"));
+    } finally {
+      setLoadingSource(null);
+    }
+  }
+
+  async function refreshSourceDetail(source: SourceSummary) {
+    const sourceKey = getSourceKey(source);
+
+    if (!source.sourceId || source.sourceType === "MANUAL" || loadingSource === sourceKey) {
+      return;
+    }
+
+    setLoadingSource(sourceKey);
+
+    try {
+      const syncPayload = await requestJson<SourceSyncResponse>(
+        `/api/assets/sources/${source.sourceId}/sync`,
+        {
+          method: "POST",
+        }
+      );
       if (syncPayload.summary) {
         onSummaryChange?.(syncPayload.summary);
       }
+      setSourceDetails((current) => {
+        const next = { ...current };
+        delete next[sourceKey];
+        return next;
+      });
+      await loadSourceDetail(source, true);
     } catch (error: any) {
       toast.error(error?.message ?? t("assets.topAssets.loadFailed"));
     } finally {
@@ -229,12 +252,7 @@ export function TopAssetsList({
                           loading={isLoading}
                           disabled={isLoading}
                           onClick={() => {
-                            setSourceDetails((current) => {
-                              const next = { ...current };
-                              delete next[sourceKey];
-                              return next;
-                            });
-                            void loadSourceDetail(source, true);
+                            void refreshSourceDetail(source);
                           }}
                         >
                           <RefreshCcw className="h-4 w-4" />

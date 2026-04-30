@@ -238,9 +238,7 @@ export default function AssetsPage() {
     }
 
     const tabsToRefresh: AssetTab[] = ["trend", "sources", "manual", "balances", "health"];
-    for (const tab of tabsToRefresh) {
-      await loadTabData(tab, true);
-    }
+    await Promise.all(tabsToRefresh.map((tab) => loadTabData(tab, true)));
   }
 
   useEffect(() => {

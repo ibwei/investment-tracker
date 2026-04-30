@@ -53,6 +53,8 @@ type AssetSyncResponse = {
   positions: NormalizedAssetPosition[];
 };
 
+const SERVICE_TIMEOUT_MS = 20_000;
+
 function getServiceBaseUrl() {
   const configured = process.env.CEX_DEX_SERVICE_URL?.trim().replace(/\/+$/, "");
   if (configured) {
@@ -75,6 +77,10 @@ function getServiceAuthHeaders() {
     : {};
 }
 
+function createTimeoutSignal() {
+  return AbortSignal.timeout(SERVICE_TIMEOUT_MS);
+}
+
 async function postToService<T>(path: string, payload: AssetSyncRequest): Promise<T> {
   const response = await fetch(`${getServiceBaseUrl()}${path}`, {
     method: "POST",
@@ -85,6 +91,7 @@ async function postToService<T>(path: string, payload: AssetSyncRequest): Promis
     },
     body: JSON.stringify(payload),
     cache: "no-store",
+    signal: createTimeoutSignal(),
   }).catch((error) => {
     throw new AssetProviderError(
       `CEX DEX service request failed: ${error instanceof Error ? error.message : "Unknown error."}`,
@@ -119,6 +126,7 @@ export async function proxyCexDexServiceGet(path: string) {
       ...getServiceAuthHeaders(),
     },
     cache: "no-store",
+    signal: createTimeoutSignal(),
   }).catch((error) => {
     throw new AssetProviderError(
       `CEX DEX service request failed: ${error instanceof Error ? error.message : "Unknown error."}`,
