@@ -4,6 +4,7 @@ import { AuthProvider } from "@/components/auth-provider";
 import { I18nProvider } from "@/lib/i18n";
 import { getSession } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
+import GAInit from "@/components/ga-init";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
 const siteName = "Earn Compass";
@@ -101,6 +102,7 @@ export default async function RootLayout({ children }) {
         <AuthProvider initialUser={user}>
           <I18nProvider>
             {children}
+            <GAInit />
             <Toaster />
           </I18nProvider>
         </AuthProvider>
