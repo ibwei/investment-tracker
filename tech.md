@@ -429,7 +429,7 @@ lib/assets/
 - `asset_name`
 - `amount`
 - `value_usd`
-- `category`: `SPOT`、`EARN`、`DEFI`、`CASH`、`DETAIL`、`OTHER`
+- `category`: `SPOT`、`EARN`、`MARGIN`、`DEFI`、`CASH`、`DETAIL`、`OTHER`
 - `raw_data`
 
 同步时当前实现会先删除该 source 旧余额，再插入本次同步结果。
@@ -509,7 +509,7 @@ type OnchainAdapter = {
 };
 ```
 
-所有 adapter 统一输出 `NormalizedAssetBalance` 和 `NormalizedAssetPosition`。余额类别支持 `SPOT`、`EARN`、`DEFI`、`CASH`、`DETAIL`、`OTHER`；仓位类型支持 `LP`、`LENDING`、`BORROWING`、`STAKING`、`FARMING`、`VESTING`、`DEFI`、`OTHER`。
+所有 adapter 统一输出 `NormalizedAssetBalance` 和 `NormalizedAssetPosition`。余额类别支持 `SPOT`、`EARN`、`MARGIN`、`DEFI`、`CASH`、`DETAIL`、`OTHER`；仓位类型支持 `LP`、`LENDING`、`BORROWING`、`STAKING`、`FARMING`、`VESTING`、`DEFI`、`OTHER`。
 
 当前 CEX adapter：
 

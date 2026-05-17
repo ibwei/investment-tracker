@@ -10,7 +10,14 @@ export type ManualAssetType =
   | "REAL_ESTATE"
   | "OTHER";
 
-export type AssetBalanceCategory = "SPOT" | "EARN" | "DEFI" | "CASH" | "DETAIL" | "OTHER";
+export type AssetBalanceCategory =
+  | "SPOT"
+  | "EARN"
+  | "MARGIN"
+  | "DEFI"
+  | "CASH"
+  | "DETAIL"
+  | "OTHER";
 
 export type AssetPositionType =
   | "LP"

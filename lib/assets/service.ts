@@ -27,6 +27,7 @@ const SYNC_ALL_CONCURRENCY = 3;
 const VALID_BALANCE_CATEGORIES = new Set<NormalizedAssetBalance["category"]>([
   "SPOT",
   "EARN",
+  "MARGIN",
   "DEFI",
   "CASH",
   "DETAIL",

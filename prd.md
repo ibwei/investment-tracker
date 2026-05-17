@@ -413,7 +413,7 @@ OAuth 账号映射包含：
 - 资产 symbol 和名称
 - 数量
 - USD 估值
-- 类别：`SPOT`、`EARN`、`DEFI`、`CASH`、`DETAIL`、`OTHER`
+- 类别：`SPOT`、`EARN`、`MARGIN`、`DEFI`、`CASH`、`DETAIL`、`OTHER`
 - 原始数据摘要
 
 `DETAIL` 类余额用于保存来源内部细项，不计入资产总览净值，避免和该来源汇总余额重复计算。

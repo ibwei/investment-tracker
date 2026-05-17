@@ -25,7 +25,9 @@ export function AssetBalanceTable({
   isLoading: boolean;
 }) {
   const { formatDisplayCurrency, formatDate, t } = useI18n();
-  const visibleBalances = balances.filter((item) => Number(item.valueUsd ?? 0) >= MIN_VISIBLE_BALANCE_USD);
+  const visibleBalances = balances.filter(
+    (item) => Math.abs(Number(item.valueUsd ?? 0)) >= MIN_VISIBLE_BALANCE_USD
+  );
   const visiblePositions = positions.filter((item) => Number(item.netValueUsd ?? 0) >= MIN_VISIBLE_BALANCE_USD);
 
   return (

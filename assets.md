@@ -593,7 +593,7 @@ type NormalizedAssetBalance = {
   assetName?: string;
   amount: number;
   valueUsd: number;
-  category: "SPOT" | "EARN" | "DEFI" | "CASH" | "OTHER";
+  category: "SPOT" | "EARN" | "MARGIN" | "DEFI" | "CASH" | "DETAIL" | "OTHER";
   rawData?: unknown;
 };
 ```
