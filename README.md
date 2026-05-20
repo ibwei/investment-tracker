@@ -86,6 +86,8 @@ APP_URL="http://localhost:3000"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 RESEND_API_KEY="..."
 RESEND_FROM_EMAIL="CeFiDeFi <alerts@yourdomain.com>"
+TELEGRAM_BOT_TOKEN="..."
+TELEGRAM_CHAT_ID="..."
 OKX_WEB3_API_KEY="..."
 OKX_WEB3_API_SECRET="..."
 OKX_WEB3_PASSPHRASE="..."
@@ -252,6 +254,8 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 - `NEXT_PUBLIC_APP_URL`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
 
 按需配置：
 

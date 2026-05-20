@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
+import { isTelegramReminderConfigured, sendTelegramMessage } from "@/lib/telegram";
 import { formatInAppTimeZone } from "@/lib/time";
 
 const REMINDER_WINDOW_HOURS = 24;
@@ -201,6 +202,43 @@ export function buildEmailText({
   windowEnd,
   referenceDate = new Date()
 }) {
+  return buildReminderText({
+    user,
+    investments,
+    windowEnd,
+    referenceDate
+  });
+}
+
+export function buildTelegramText({
+  user,
+  investments,
+  windowEnd,
+  referenceDate = new Date()
+}) {
+  const dashboardUrl = buildDashboardUrl();
+  const lines = [
+    buildReminderText({
+      user,
+      investments,
+      windowEnd,
+      referenceDate
+    })
+  ];
+
+  if (dashboardUrl) {
+    lines.push("", `打开 CeFiDeFi 仪表盘：${dashboardUrl}`);
+  }
+
+  return lines.join("\n");
+}
+
+function buildReminderText({
+  user,
+  investments,
+  windowEnd,
+  referenceDate = new Date()
+}) {
   const now = toDate(referenceDate) || new Date();
   const {
     expiringInvestments,
@@ -245,6 +283,42 @@ export function buildEmailText({
   }
 
   return lines.join("\n");
+}
+
+async function sendTelegramReminder(payload) {
+  if (!isTelegramReminderConfigured()) {
+    return {
+      status: "skipped",
+      messageIds: [],
+      chunkCount: 0,
+      error: null
+    };
+  }
+
+  try {
+    const result = await sendTelegramMessage({
+      text: buildTelegramText(payload)
+    });
+
+    return {
+      status: "sent",
+      messageIds: result.messageIds,
+      chunkCount: result.chunkCount,
+      error: null
+    };
+  } catch (error) {
+    console.warn("Telegram reminder delivery failed.", {
+      userId: payload.user?.id ?? null,
+      error: error?.message ?? "Unknown Telegram delivery error."
+    });
+
+    return {
+      status: "failed",
+      messageIds: [],
+      chunkCount: 0,
+      error: error?.message ?? "Telegram reminder delivery failed."
+    };
+  }
 }
 
 function groupInvestmentsByUser(investments) {
@@ -312,6 +386,9 @@ export async function sendExpiringInvestmentReminders(referenceDate = new Date()
       activeCount: 0,
       expiringCount: 0,
       emailedUserCount: 0,
+      telegramDeliveredUserCount: 0,
+      telegramSkippedUserCount: 0,
+      telegramFailedUserCount: 0,
       deliveries: []
     };
   }
@@ -362,19 +439,25 @@ export async function sendExpiringInvestmentReminders(referenceDate = new Date()
       windowEnd,
       referenceDate: now
     };
+    const emailText = buildEmailText(payload);
     const result = await sendEmail({
       to: group.user.email,
       subject,
       html: buildEmailHtml(payload),
-      text: buildEmailText(payload)
+      text: emailText
     });
+    const telegramResult = await sendTelegramReminder(payload);
 
     deliveries.push({
       userId: group.user.id,
       email: group.user.email,
       investmentCount: group.investments.length,
       expiringCount: expiringInvestments.length,
-      messageId: result?.id ?? null
+      messageId: result?.id ?? null,
+      telegramStatus: telegramResult.status,
+      telegramMessageIds: telegramResult.messageIds,
+      telegramChunkCount: telegramResult.chunkCount,
+      telegramError: telegramResult.error
     });
   }
 
@@ -383,6 +466,9 @@ export async function sendExpiringInvestmentReminders(referenceDate = new Date()
     activeCount: activeInvestments.length,
     expiringCount,
     emailedUserCount: deliveries.length,
+    telegramDeliveredUserCount: deliveries.filter((delivery) => delivery.telegramStatus === "sent").length,
+    telegramSkippedUserCount: deliveries.filter((delivery) => delivery.telegramStatus === "skipped").length,
+    telegramFailedUserCount: deliveries.filter((delivery) => delivery.telegramStatus === "failed").length,
     deliveries
   };
 }

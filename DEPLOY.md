@@ -10,6 +10,8 @@ Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. 
   - `ASSET_CREDENTIAL_ENCRYPTION_KEY`: 32-byte master key for encrypting stored CEX API Key, API Secret, and Passphrase values. Generate with `openssl rand -base64 32` and store as `base64:<output>`.
   - `CRON_SECRET`: long random string used by cron routes.
   - `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
+  - `TELEGRAM_BOT_TOKEN`: Telegram Bot API token used to send personal investment expiry reminders.
+  - `TELEGRAM_CHAT_ID`: personal Telegram chat ID that receives reminder bot messages.
   - `OKX_WEB3_API_KEY`: OKX Web3 API key used by the Assets on-chain provider.
   - `OKX_WEB3_API_SECRET`: OKX Web3 API secret used to sign on-chain provider requests.
   - `OKX_WEB3_PASSPHRASE`: OKX Web3 API passphrase used to sign on-chain provider requests.
@@ -46,14 +48,14 @@ Do not create `var.env` or `vars.env`. If one appears locally, migrate its value
 - Cloudflare calls `custom-worker.js` through the Worker `scheduled()` handler.
 - The scheduled handler forwards requests to the existing cron API routes with `Authorization: Bearer <CRON_SECRET>`.
 - The cron routes also accept `x-cron-secret` so they can be tested manually from tools like `curl` or Postman.
-- The expiry reminder route emails each active user with `ONGOING` investments twice per day at `10:00` and `22:00` in `Asia/Shanghai`. Investments expiring in the next 24 hours are shown first, followed by the user's other active investments.
+- The expiry reminder route emails each active user with `ONGOING` investments twice per day at `10:00` and `22:00` in `Asia/Shanghai`. When `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are configured, the same reminder is also sent to the configured personal Telegram chat. Investments expiring in the next 24 hours are shown first, followed by the user's other active investments.
 
 ## First Production Deploy
 
 1. Keep or provision a PostgreSQL database for production.
 2. Run `npm install`.
 3. If this is a new database, run [db/schema.sql](/Users/baiwei/Desktop/berry/earn/cefidefi/db/schema.sql:1) against the intended PostgreSQL database before the first cron run.
-4. Add Cloudflare runtime secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `ASSET_CREDENTIAL_ENCRYPTION_KEY`, `CRON_SECRET`, `RESEND_API_KEY`, and OAuth secrets if used.
+4. Add Cloudflare runtime secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `ASSET_CREDENTIAL_ENCRYPTION_KEY`, `CRON_SECRET`, `RESEND_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and OAuth secrets if used.
 5. Configure runtime non-secret vars such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, `RESEND_FROM_EMAIL`, and OAuth client IDs in `Settings > Variables and Secrets`.
 6. In the Cloudflare Git build settings, set:
    - Build command: `npm run build`
