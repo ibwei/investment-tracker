@@ -221,8 +221,9 @@ Key APIs:
 
 Cloudflare cron configuration is in `wrangler.jsonc`:
 
-- `/api/cron/snapshots` runs daily at `12:00 UTC`.
-- `/api/cron/investments/expiry-reminders` runs daily at `02:00 UTC`.
+- `/api/cron/snapshots` runs hourly on the hour.
+- `/api/cron/assets/sync` runs hourly at minute 5.
+- `/api/cron/investments/expiry-reminders` runs daily at `02:00 UTC` and `14:00 UTC`.
 
 Cloudflare calls `custom-worker.js` through the Worker `scheduled()` handler. The handler forwards to the existing cron API routes with `Authorization: Bearer <CRON_SECRET>`. Routes may also accept `x-cron-secret` for manual testing if implemented.
 

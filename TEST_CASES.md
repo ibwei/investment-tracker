@@ -611,7 +611,7 @@
 
 - 优先级：P1
 - 步骤：在 Worker scheduled handler 中传入各 cron 表达式。
-- 预期结果：`0 */12 * * *` 转发 snapshots；`0 */4 * * *` 转发 assets sync；`0 1/4 * * *` 转发 settle；`0 2 * * *` 和 `0 14 * * *` 转发 expiry reminders。
+- 预期结果：`0 * * * *` 转发 snapshots；`5 * * * *` 转发 assets sync；`0 1/4 * * *` 转发 settle；`0 2 * * *` 和 `0 14 * * *` 转发 expiry reminders。
 
 ## 10. 国际化、币种和时区测试用例
 

@@ -53,7 +53,7 @@ Assets 模块符合当前项目基线：
 - 同步健康面板
 - 单来源手动同步
 - 全部来源手动同步
-- 每 4 小时 Cron 批量同步
+- 每小时 Cron 批量同步
 - CEX API 凭据 AES-256-GCM 加密
 - 资产同步日志
 
@@ -257,7 +257,7 @@ On-chain portfolio adapter：
 
 系统通过 Cloudflare Cron 周期性同步资产：
 
-- Cron 表达式：`0 */4 * * *`
+- Cron 表达式：`5 * * * *`
 - Route：`GET /api/cron/assets/sync`
 - 只处理 `ACTIVE`、`FAILED`、`PENDING` 资产来源
 - 单个 source 失败会记录失败状态和 sync log
@@ -823,14 +823,14 @@ type OnchainAdapter = {
 
 当前 `wrangler.jsonc` 已有：
 
-- `0 */12 * * *` -> `/api/cron/snapshots`
-- `0 */4 * * *` -> `/api/cron/assets/sync`
+- `0 * * * *` -> `/api/cron/snapshots`
+- `5 * * * *` -> `/api/cron/assets/sync`
 - `0 2 * * *` -> `/api/cron/investments/expiry-reminders`
 - `0 14 * * *` -> `/api/cron/investments/expiry-reminders`
 
 `custom-worker.js` 中维护同样映射。
 
-Cloudflare Cron 使用 UTC。`0 */4 * * *` 表示每天 00:00、04:00、08:00、12:00、16:00、20:00 UTC 执行。
+Cloudflare Cron 使用 UTC。`5 * * * *` 表示每小时第 5 分钟执行。
 
 ## 15. 安全设计
 
