@@ -136,7 +136,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
         remark: investment.remark,
         expectedApr: investment.expectedApr,
         actualApr: investment.actualApr,
-        expectedIncome: investment.totalIncome,
+        expectedIncome: investment.totalIncome > 0 ? investment.totalIncome : undefined,
       })
     } else {
       form.reset({

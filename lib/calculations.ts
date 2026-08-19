@@ -84,8 +84,13 @@ export function calculateInvestmentMetrics(record, referenceDate = new Date(), t
   const holdingDays = calculateHoldingDays(record, referenceDate, timeZone);
   const plannedDays = calculatePlannedDays(record, timeZone);
   const isOngoing = record.status === "ONGOING";
+  const shouldDeriveZeroIncome = isOngoing && amount > 0 && expectedApr > 0;
+  const incomeNumber = (value) => {
+    const parsed = toNullableNumber(value);
+    return shouldDeriveZeroIncome && parsed === 0 ? null : parsed;
+  };
 
-  const manualTotal = toNullableNumber(record.incomeTotal);
+  const manualTotal = incomeNumber(record.incomeTotal);
   const derivedActualAprFromTotal =
     !isOngoing && manualTotal !== null && amount > 0 && holdingDays > 0
       ? (manualTotal / amount) * (365 / holdingDays) * 100
@@ -105,15 +110,15 @@ export function calculateInvestmentMetrics(record, referenceDate = new Date(), t
       : holdingDays;
 
   const dailyIncome =
-    toNullableNumber(record.incomeDaily) ??
+    incomeNumber(record.incomeDaily) ??
     (manualTotal !== null && incomePeriodDays > 0 ? manualTotal / incomePeriodDays : autoDaily);
 
   const weeklyIncome =
-    toNullableNumber(record.incomeWeekly) ?? dailyIncome * 7;
+    incomeNumber(record.incomeWeekly) ?? dailyIncome * 7;
   const monthlyIncome =
-    toNullableNumber(record.incomeMonthly) ?? dailyIncome * 30;
+    incomeNumber(record.incomeMonthly) ?? dailyIncome * 30;
   const yearlyIncome =
-    toNullableNumber(record.incomeYearly) ?? (amount * effectiveApr) / 100;
+    incomeNumber(record.incomeYearly) ?? (amount * effectiveApr) / 100;
   const totalIncome =
     manualTotal ?? dailyIncome * Math.max(holdingDays, 1);
 

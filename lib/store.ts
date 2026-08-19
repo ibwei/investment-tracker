@@ -241,7 +241,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
           remark: data.remark ?? current.remark,
           expectedApr: data.expectedApr ?? current.expectedApr,
           actualApr: data.actualApr ?? current.actualApr,
-          expectedIncome: data.expectedIncome ?? current.totalIncome,
+          expectedIncome: data.expectedIncome,
         }
 
         set({ isLoading: true, errorMessage: '' })
