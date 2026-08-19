@@ -80,15 +80,22 @@ export function parseAppDate(value, timeZone = DEFAULT_APP_TIMEZONE) {
     return null;
   }
 
+  if (hasExplicitTimezone(normalized)) {
+    try {
+      const parsed = dayjs(normalized).tz(resolvedTimeZone);
+      return parsed.isValid() ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
   const localParsed = parseLocalString(normalized, resolvedTimeZone);
   if (localParsed) {
     return localParsed;
   }
 
   try {
-    const parsed = hasExplicitTimezone(normalized)
-      ? dayjs(normalized).tz(resolvedTimeZone)
-      : dayjs.tz(normalized, resolvedTimeZone);
+    const parsed = dayjs.tz(normalized, resolvedTimeZone);
 
     return parsed.isValid() ? parsed : null;
   } catch {
