@@ -1306,7 +1306,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
               }
             : {}),
           ...options,
-        }, timezone),
+        }, DEFAULT_APP_TIMEZONE),
       localizeErrorMessage: (message) => {
         const key = serverErrorKeyMap[message]
         return key ? t(key) : message

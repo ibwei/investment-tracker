@@ -76,7 +76,7 @@ export function TopAssetsList({
   formatDisplayCurrency,
   onSummaryChange,
 }: TopAssetsListProps) {
-  const { t } = useI18n();
+  const { formatDate, t } = useI18n();
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
   const [sourceDetails, setSourceDetails] = useState<Record<string, LoadedSourceDetail>>({});
   const [loadingSource, setLoadingSource] = useState<string | null>(null);
@@ -238,7 +238,7 @@ export function TopAssetsList({
                       <span>
                         {detail
                           ? t("assets.topAssets.updatedAt", {
-                              time: new Date(detail.syncedAt).toLocaleString(),
+                              time: formatDate(detail.syncedAt),
                             })
                           : source.sourceType === "MANUAL"
                             ? t("assets.topAssets.manualHint")
