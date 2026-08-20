@@ -42,6 +42,10 @@ function hasExplicitTimezone(value) {
   return /(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
 }
 
+function hasTimeComponent(value) {
+  return /[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?/.test(value);
+}
+
 function parseLocalString(value, timeZone) {
   for (const format of LOCAL_INPUT_FORMATS) {
     try {
@@ -139,7 +143,11 @@ export function diffAppCalendarDays(startValue, endValue, timeZone = DEFAULT_APP
 
 export function formatInAppTimeZone(value, locale, options = {}, timeZone = DEFAULT_APP_TIMEZONE) {
   const resolvedTimeZone = resolveAppTimeZone(timeZone);
-  const parsed = parseAppDate(value, resolvedTimeZone);
+  const normalized = typeof value === "string" ? value.trim() : "";
+  const parsed =
+    normalized && hasTimeComponent(normalized) && !hasExplicitTimezone(normalized)
+      ? dayjs.utc(normalized).tz(resolvedTimeZone)
+      : parseAppDate(value, resolvedTimeZone);
   if (!parsed) {
     return "";
   }
