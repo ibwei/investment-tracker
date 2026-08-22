@@ -144,16 +144,16 @@ export function diffAppCalendarDays(startValue, endValue, timeZone = DEFAULT_APP
 export function formatInAppTimeZone(value, locale, options = {}, timeZone = DEFAULT_APP_TIMEZONE) {
   const resolvedTimeZone = resolveAppTimeZone(timeZone);
   const normalized = typeof value === "string" ? value.trim() : "";
-  const parsed =
-    normalized && hasTimeComponent(normalized) && !hasExplicitTimezone(normalized)
-      ? dayjs.utc(normalized).tz(resolvedTimeZone)
-      : parseAppDate(value, resolvedTimeZone);
+  const shouldApplyShanghaiOffset = normalized && hasTimeComponent(normalized);
+  const parsed = shouldApplyShanghaiOffset
+    ? dayjs.utc(normalized).add(8, "hour")
+    : parseAppDate(value, resolvedTimeZone);
   if (!parsed) {
     return "";
   }
 
   return new Intl.DateTimeFormat(locale, {
-    timeZone: resolvedTimeZone,
+    timeZone: shouldApplyShanghaiOffset ? "UTC" : resolvedTimeZone,
     ...options,
   }).format(parsed.toDate());
 }
