@@ -5,6 +5,29 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { AssetSummaryResponse } from "@/lib/assets/types";
 import { useI18n } from "@/lib/i18n";
 
+function formatUtcPlusEight(value: string) {
+  const normalized = value.trim();
+  const utcText = /(?:Z|[+-]\d{2}:\d{2})$/i.test(normalized)
+    ? normalized
+    : `${normalized.replace(" ", "T")}Z`;
+  const parsed = new Date(utcText);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "UTC"
+  }).format(new Date(parsed.getTime() + 8 * 60 * 60 * 1000));
+}
+
 export function AssetSummaryCards({ summary }: { summary: AssetSummaryResponse["summary"] }) {
   const { formatDisplayCurrency, formatDate, t } = useI18n();
   const changeValue =
@@ -43,7 +66,7 @@ export function AssetSummaryCards({ summary }: { summary: AssetSummaryResponse["
     },
     {
       title: t("assets.summary.lastSync"),
-      value: summary.lastSyncedAt ? formatDate(summary.lastSyncedAt) : t("assets.summary.never"),
+      value: summary.lastSyncedAt ? formatUtcPlusEight(summary.lastSyncedAt) : t("assets.summary.never"),
       description: t("assets.summary.lastSyncDescription"),
       icon: RefreshCcw,
     },

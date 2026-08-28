@@ -224,7 +224,7 @@ Key APIs:
 Cloudflare cron configuration is in `wrangler.jsonc`:
 
 - `/api/cron/snapshots` runs every 12 hours with `0 */12 * * *`.
-- `/api/cron/assets/sync` runs every 4 hours at minute 5 with `5 */4 * * *`.
+- `/api/cron/assets/sync` runs every 2 hours at minute 5 with `5 */2 * * *`.
 - `/api/cron/investments/expiry-reminders` runs daily at `02:00 UTC` and `14:00 UTC`.
 - On the `00:00 UTC` occurrence of `0 */12 * * *`, `custom-worker.js` also dispatches `/api/cron/telegram/daily-report` in parallel with snapshots. The report only refreshes the configured user.
 

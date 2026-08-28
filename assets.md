@@ -257,7 +257,7 @@ On-chain portfolio adapter：
 
 系统通过 Cloudflare Cron 周期性同步资产：
 
-- Cron 表达式：`5 */4 * * *`
+- Cron 表达式：`5 */2 * * *`
 - Route：`GET /api/cron/assets/sync`
 - 只处理 `ACTIVE`、`FAILED`、`PENDING` 资产来源
 - 单个 source 失败会记录失败状态和 sync log
@@ -824,13 +824,13 @@ type OnchainAdapter = {
 当前 `wrangler.jsonc` 已有：
 
 - `0 */12 * * *` -> `/api/cron/snapshots`；UTC 00:00 这一轮并行执行单账号 Telegram 日报
-- `5 */4 * * *` -> `/api/cron/assets/sync`
+- `5 */2 * * *` -> `/api/cron/assets/sync`
 - `0 2 * * *` -> `/api/cron/investments/expiry-reminders`
 - `0 14 * * *` -> `/api/cron/investments/expiry-reminders`
 
 `custom-worker.js` 中维护同样映射。
 
-Cloudflare Cron 使用 UTC。`5 */4 * * *` 表示每天 00:05、04:05、08:05、12:05、16:05、20:05 UTC 执行全量资产同步；`0 */12 * * *` 的 00:00 UTC 这一轮会并行刷新目标账号并发送单账号日报，不受全量资产同步耗时影响。
+Cloudflare Cron 使用 UTC。`5 */2 * * *` 表示每 2 小时第 5 分钟执行全量资产同步；`0 */12 * * *` 的 00:00 UTC 这一轮会并行刷新目标账号并发送单账号日报，不受全量资产同步耗时影响。
 
 ## 15. 安全设计
 

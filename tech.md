@@ -798,7 +798,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 - placement region：`aws:ap-northeast-1`
 - Cron：
   - `0 */12 * * *`
-  - `5 */4 * * *`
+  - `5 */2 * * *`
   - `0 1/4 * * *`
   - `0 2 * * *`
   - `0 14 * * *`
@@ -811,7 +811,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 `custom-worker.js` 当前映射：
 
 - `0 */12 * * *` -> `/api/cron/snapshots`；UTC 00:00 这一轮并行调用 `/api/cron/telegram/daily-report`
-- `5 */4 * * *` -> `/api/cron/assets/sync`
+- `5 */2 * * *` -> `/api/cron/assets/sync`
 - `0 1/4 * * *` -> `/api/cron/investments/settle`
 - `0 2 * * *` -> `/api/cron/investments/expiry-reminders`
 - `0 14 * * *` -> `/api/cron/investments/expiry-reminders`
@@ -819,7 +819,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 Cloudflare Cron 使用 UTC：
 
 - `0 */12 * * *` = 每 12 小时一次
-- `5 */4 * * *` = 每 4 小时第 5 分钟执行一次全量资产同步
+- `5 */2 * * *` = 每 2 小时第 5 分钟执行一次全量资产同步
 - `0 1/4 * * *` = 每 4 小时一次，较整点 4 小时任务错峰 1 小时
 - `0 */12 * * *` 的 `00:00 UTC` 这一轮 = `08:00 Asia/Shanghai`，并行执行单账号日报
 - `02:00 UTC` = `10:00 Asia/Shanghai`

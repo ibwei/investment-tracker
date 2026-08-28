@@ -275,7 +275,7 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 Cloudflare Cron 当前配置：
 
 - `0 */12 * * *`：转发到 `/api/cron/snapshots`，每 12 小时采集收益/组合快照；UTC 00:00 这一轮并行执行单账号 Telegram 日报
-- `5 */4 * * *`：转发到 `/api/cron/assets/sync`，每 4 小时第 5 分钟同步全部账号资产
+- `5 */2 * * *`：转发到 `/api/cron/assets/sync`，每 2 小时第 5 分钟同步全部账号资产
 - `0 1/4 * * *`：转发到 `/api/cron/investments/settle`，错峰 1 小时后每 4 小时自动结束已到期投资
 - `0 2 * * *`：转发到 `/api/cron/investments/expiry-reminders`，对应 UTC+8 每天 10:00
 - `0 14 * * *`：转发到 `/api/cron/investments/expiry-reminders`，对应 UTC+8 每天 22:00
