@@ -127,6 +127,15 @@ export async function getUserById(id) {
   return user ? mapUser(user) : null;
 }
 
+export async function getUserByEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  const user = await queryOne(`select ${USER_FIELDS} from users where email = $1 limit 1`, [
+    normalizedEmail
+  ]);
+
+  return user ? mapUser(user) : null;
+}
+
 export async function registerUser(input) {
   const email = normalizeEmail(input.email);
   const password = normalizePassword(input.password);

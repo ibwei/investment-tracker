@@ -285,8 +285,15 @@ function buildReminderText({
   return lines.join("\n");
 }
 
+function isTelegramReportUser(user) {
+  const reportEmail = process.env.TELEGRAM_REPORT_USER_EMAIL?.trim().toLowerCase();
+  const userEmail = String(user?.email || "").trim().toLowerCase();
+
+  return Boolean(reportEmail && userEmail === reportEmail);
+}
+
 async function sendTelegramReminder(payload) {
-  if (!isTelegramReminderConfigured()) {
+  if (!isTelegramReportUser(payload.user) || !isTelegramReminderConfigured()) {
     return {
       status: "skipped",
       messageIds: [],

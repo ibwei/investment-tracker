@@ -4,6 +4,7 @@ import { toAppDateKey } from "@/lib/time";
 import { getUserTimeZone } from "@/lib/users";
 
 const DEFAULT_SNAPSHOT_DAYS = 90;
+const SCHEDULED_JOB_LEASE_MS = 30 * 60 * 1000;
 
 function assert(condition, message, status = 400) {
   if (!condition) {
@@ -198,15 +199,16 @@ export async function captureUserSnapshots(
       await client.query(
         `
           insert into investment_daily_snapshots (
-            user_id, investment_id, snapshot_date, principal, apr_expected, apr_actual,
-            income_daily, income_weekly, income_monthly, income_yearly, income_total,
-            status, created_at
+            user_id, investment_id, snapshot_date, principal, currency, apr_expected,
+            apr_actual, income_daily, income_weekly, income_monthly, income_yearly,
+            income_total, status, created_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           on conflict (investment_id, snapshot_date)
           do update set
             user_id = excluded.user_id,
             principal = excluded.principal,
+            currency = excluded.currency,
             apr_expected = excluded.apr_expected,
             apr_actual = excluded.apr_actual,
             income_daily = excluded.income_daily,
@@ -222,6 +224,7 @@ export async function captureUserSnapshots(
           Number(record.id),
           snapshotDate,
           record.metrics.amount,
+          record.currency,
           record.metrics.expectedApr,
           record.metrics.actualApr,
           record.metrics.dailyIncome,
@@ -345,6 +348,167 @@ export async function listPortfolioSnapshots(
     activeInvestmentCount: snapshot.activeInvestmentCount ?? 0,
     createdAt: snapshot.createdAt
   }));
+}
+
+export async function getDailyIncomeSnapshot(userId, snapshotDate: string) {
+  const normalizedUserId = normalizeUserId(userId);
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(snapshotDate), "Snapshot date is invalid.");
+
+  const row = await queryOne<{
+    totalIncomeDaily: number;
+    activeInvestmentCount: number;
+    snapshotInvestmentCount: number;
+    calculatedIncomeDaily: number;
+    incomeCurrencies: string[];
+    missingCurrencyCount: number;
+  }>(
+    `
+      with investment_summary as (
+        select
+          count(*) filter (where status = 'ONGOING')::integer as "snapshotInvestmentCount",
+          coalesce(
+            sum(coalesce(income_daily, 0)) filter (where status = 'ONGOING'),
+            0
+          )::double precision as "calculatedIncomeDaily",
+          coalesce(
+            array_agg(distinct upper(trim(currency))) filter (
+              where status = 'ONGOING'
+                and abs(coalesce(income_daily, 0)) > 0
+                and nullif(trim(currency), '') is not null
+            ),
+            array[]::text[]
+          ) as "incomeCurrencies",
+          count(*) filter (
+            where status = 'ONGOING'
+              and abs(coalesce(income_daily, 0)) > 0
+              and nullif(trim(currency), '') is null
+          )::integer as "missingCurrencyCount"
+        from investment_daily_snapshots
+        where user_id = $1 and snapshot_date = $2
+      )
+      select
+        portfolio_daily_snapshots.total_income_daily as "totalIncomeDaily",
+        portfolio_daily_snapshots.active_investment_count as "activeInvestmentCount",
+        investment_summary."snapshotInvestmentCount",
+        investment_summary."calculatedIncomeDaily",
+        investment_summary."incomeCurrencies",
+        investment_summary."missingCurrencyCount"
+      from portfolio_daily_snapshots
+      cross join investment_summary
+      where portfolio_daily_snapshots.user_id = $1
+        and portfolio_daily_snapshots.snapshot_date = $2
+      limit 1
+    `,
+    [normalizedUserId, snapshotDate]
+  );
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    totalIncomeDaily: Number(row.totalIncomeDaily ?? 0),
+    activeInvestmentCount: Number(row.activeInvestmentCount ?? 0),
+    snapshotInvestmentCount: Number(row.snapshotInvestmentCount ?? 0),
+    calculatedIncomeDaily: Number(row.calculatedIncomeDaily ?? 0),
+    incomeCurrencies: Array.isArray(row.incomeCurrencies) ? row.incomeCurrencies : [],
+    missingCurrencyCount: Number(row.missingCurrencyCount ?? 0)
+  };
+}
+
+export async function claimScheduledJobRun({
+  jobName,
+  runDate,
+  startedAt = toIsoTimestamp()
+}) {
+  const normalizedStartedAt = new Date(startedAt).toISOString();
+  const staleBefore = new Date(
+    new Date(normalizedStartedAt).getTime() - SCHEDULED_JOB_LEASE_MS
+  ).toISOString();
+
+  return queryOne(
+    `
+      insert into scheduled_job_logs as existing_job (
+        job_name, run_date, status, processed_count, started_at, created_at
+      )
+      values ($1, $2, 'RUNNING', 0, $3, $3)
+      on conflict (job_name, run_date)
+      do update set
+        status = 'RUNNING',
+        processed_count = 0,
+        duration_ms = null,
+        error_message = null,
+        started_at = excluded.started_at,
+        finished_at = null
+      where existing_job.status = 'FAILED'
+        or (
+          existing_job.status = 'RUNNING'
+          and (
+            existing_job.started_at is null
+            or existing_job.started_at::timestamptz < $4::timestamptz
+          )
+        )
+      returning *
+    `,
+    [jobName, runDate, normalizedStartedAt, staleBefore]
+  );
+}
+
+export async function markClaimedScheduledJobSending({
+  jobName,
+  runDate,
+  claimedAt
+}) {
+  return queryOne(
+    `
+      update scheduled_job_logs
+      set status = 'SENDING'
+      where job_name = $1
+        and run_date = $2
+        and status = 'RUNNING'
+        and started_at = $3
+      returning *
+    `,
+    [jobName, runDate, claimedAt]
+  );
+}
+
+export async function finishClaimedScheduledJobRun({
+  jobName,
+  runDate,
+  claimedAt,
+  status,
+  processedCount = 0,
+  durationMs = null,
+  errorMessage = null,
+  finishedAt = toIsoTimestamp()
+}) {
+  return queryOne(
+    `
+      update scheduled_job_logs
+      set
+        status = $4,
+        processed_count = $5,
+        duration_ms = $6,
+        error_message = $7,
+        finished_at = $8
+      where job_name = $1
+        and run_date = $2
+        and status in ('RUNNING', 'SENDING')
+        and started_at = $3
+      returning *
+    `,
+    [
+      jobName,
+      runDate,
+      claimedAt,
+      status,
+      processedCount,
+      durationMs,
+      errorMessage,
+      finishedAt
+    ]
+  );
 }
 
 export async function writeScheduledJobLog({

@@ -216,13 +216,17 @@ Key APIs:
 - `GET /api/exchange-rate`
 - `GET /api/cron/snapshots`
 - `GET /api/cron/investments/expiry-reminders`
+- `GET /api/cron/assets/sync`
+- `GET /api/cron/telegram/daily-report`
 
 ## Cron Jobs
 
 Cloudflare cron configuration is in `wrangler.jsonc`:
 
-- `/api/cron/snapshots` runs daily at `12:00 UTC`.
-- `/api/cron/investments/expiry-reminders` runs daily at `02:00 UTC`.
+- `/api/cron/snapshots` runs every 12 hours with `0 */12 * * *`.
+- `/api/cron/assets/sync` runs every 4 hours at minute 5 with `5 */4 * * *`.
+- `/api/cron/investments/expiry-reminders` runs daily at `02:00 UTC` and `14:00 UTC`.
+- On the `00:00 UTC` occurrence of `0 */12 * * *`, `custom-worker.js` also dispatches `/api/cron/telegram/daily-report` in parallel with snapshots. The report only refreshes the configured user.
 
 Cloudflare calls `custom-worker.js` through the Worker `scheduled()` handler. The handler forwards to the existing cron API routes with `Authorization: Bearer <CRON_SECRET>`. Routes may also accept `x-cron-secret` for manual testing if implemented.
 

@@ -209,7 +209,7 @@ Earn Compass 当前是一个 Next.js 全栈应用，前端页面、服务端 API
 - `investments`
   - 投资主记录
 - `investment_daily_snapshots`
-  - 单笔投资每日快照
+  - 单笔投资每日快照，并固化快照时的币种
 - `portfolio_daily_snapshots`
   - 用户收益组合每日快照
 - `asset_sources`
@@ -689,6 +689,11 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 - `GET /api/cron/assets/sync`
   - 同步所有 `ACTIVE`、`FAILED`、`PENDING` 资产来源
   - 写入 `scheduled_job_logs`，jobName 为 `asset-source-sync`
+- `GET /api/cron/telegram/daily-report`
+  - 只读取 `TELEGRAM_REPORT_USER_EMAIL` 精确匹配的 `ACTIVE + REMOTE` 用户，不遍历、不回退其他用户
+  - 发送前只刷新目标用户的资产来源，不等待其他用户的全量资产同步
+  - 消息严格只推送昨日预计理财收入和当前资产合计两行，不包含日期、投资或资产明细
+  - 使用 `scheduled_job_logs` 原子领取当天任务，避免同日重复推送
 
 ## 11. 快照与定时任务
 
@@ -699,7 +704,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 1. 读取用户未删除投资记录
 2. 按用户时区生成 `snapshot_date`
 3. 归一化每条投资的收益指标
-4. upsert `investment_daily_snapshots`
+4. 将当时币种与收益指标一起 upsert 到 `investment_daily_snapshots`
 5. 聚合并 upsert `portfolio_daily_snapshots`
 
 `captureSnapshotsForRemoteUsers()` 只处理 `storage_mode = 'REMOTE'` 的用户。
@@ -724,6 +729,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 - 统计未来 24 小时内到期投资
 - 构建 HTML 和 text 邮件
 - 通过 `lib/email.ts` 调用 Resend
+- 仅当用户邮箱精确匹配 `TELEGRAM_REPORT_USER_EMAIL` 时，才把该用户的到期提醒发送到全局 `TELEGRAM_CHAT_ID`
 
 当前行为是：只要用户存在活跃投资，每天 10:00 和 22:00（UTC+8）都会收到摘要邮件；未来 24 小时内到期的项目在邮件中优先展示。
 
@@ -760,6 +766,14 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 
 当前手动同步没有严格的服务端节流。UI 会显示 loading 状态，但后续仍需要增加节流、分页或队列化，降低外部 API rate limit 和 Worker 执行时长风险。
 
+### 11.6 Telegram 每日总览
+
+`lib/telegram-daily-report.ts` 按固定 `Asia/Shanghai` 日期生成单账号日报，并要求目标账号使用相同时区。昨日理财收入从同一天的单笔投资快照与组合快照交叉校验，属于预计值；资产合计取目标账号资产同步后的 `totalValueUsd`。如果昨日快照不存在，消息显示“暂无昨日数据”，不会用今天数据或 `0` 代替。只有历史明细覆盖完整且产生收益的币种全部属于 USD、USDC 或 USDT 口径时才显示统一美元金额；其他情况停止汇总，避免把不同单位直接相加或使用投资记录的当前币种补猜。
+
+目标账号由 Worker runtime 的 `TELEGRAM_REPORT_USER_EMAIL` 精确绑定，Telegram 接收方由 `TELEGRAM_CHAT_ID` 绑定。账号缺失、找不到、不是 `ACTIVE` 或不是 `REMOTE` 时任务失败并且不发送，也不会选择第一个用户或遍历所有用户。
+
+日报通过 `scheduled_job_logs` 原子领取任务：`SUCCESS` 阻止同日重复，`FAILED` 可立即重试，超过 30 分钟的 `RUNNING` 可重新领取。调用 Telegram 前必须由当前 `started_at` claim token 原子切换为 `SENDING`；被接管的旧任务无法进入发送阶段，也不能覆盖新任务结果。进入 `SENDING` 后的任何错误都记为 `DELIVERY_UNKNOWN` 并停止自动重试。Telegram 本身不提供幂等键，因此无法对“服务端已接收消息但客户端没有收到响应”的极端情况保证严格 exactly-once。
+
 ## 12. Cloudflare Workers 部署
 
 ### 12.1 构建与入口
@@ -784,7 +798,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 - placement region：`aws:ap-northeast-1`
 - Cron：
   - `0 */12 * * *`
-  - `0 */4 * * *`
+  - `5 */4 * * *`
   - `0 1/4 * * *`
   - `0 2 * * *`
   - `0 14 * * *`
@@ -796,8 +810,8 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 
 `custom-worker.js` 当前映射：
 
-- `0 */12 * * *` -> `/api/cron/snapshots`
-- `0 */4 * * *` -> `/api/cron/assets/sync`
+- `0 */12 * * *` -> `/api/cron/snapshots`；UTC 00:00 这一轮并行调用 `/api/cron/telegram/daily-report`
+- `5 */4 * * *` -> `/api/cron/assets/sync`
 - `0 1/4 * * *` -> `/api/cron/investments/settle`
 - `0 2 * * *` -> `/api/cron/investments/expiry-reminders`
 - `0 14 * * *` -> `/api/cron/investments/expiry-reminders`
@@ -805,8 +819,9 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 Cloudflare Cron 使用 UTC：
 
 - `0 */12 * * *` = 每 12 小时一次
-- `0 */4 * * *` = 每 4 小时一次
+- `5 */4 * * *` = 每 4 小时第 5 分钟执行一次全量资产同步
 - `0 1/4 * * *` = 每 4 小时一次，较整点 4 小时任务错峰 1 小时
+- `0 */12 * * *` 的 `00:00 UTC` 这一轮 = `08:00 Asia/Shanghai`，并行执行单账号日报
 - `02:00 UTC` = `10:00 Asia/Shanghai`
 - `14:00 UTC` = `22:00 Asia/Shanghai`
 
@@ -824,6 +839,7 @@ Cloudflare Cron 使用 UTC：
 - `RESEND_FROM_EMAIL`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
+- `TELEGRAM_REPORT_USER_EMAIL`
 - `ASSET_CREDENTIAL_ENCRYPTION_KEY`
 
 数据库连接至少需要一种：

@@ -611,7 +611,25 @@
 
 - 优先级：P1
 - 步骤：在 Worker scheduled handler 中传入各 cron 表达式。
-- 预期结果：`0 */12 * * *` 转发 snapshots；`0 */4 * * *` 转发 assets sync；`0 1/4 * * *` 转发 settle；`0 2 * * *` 和 `0 14 * * *` 转发 expiry reminders。
+- 预期结果：`0 */12 * * *` 转发 snapshots，且 UTC 00:00 这一轮并行转发单账号 Telegram 日报；`5 */4 * * *` 转发 assets sync；`0 1/4 * * *` 转发 settle；`0 2 * * *` 和 `0 14 * * *` 转发 expiry reminders。
+
+### CRON-013 Telegram 单账号日报
+
+- 优先级：P0
+- 测试数据：多个 `ACTIVE + REMOTE` 用户，只有一个邮箱精确匹配 `TELEGRAM_REPORT_USER_EMAIL`；目标账号时区为 `Asia/Shanghai`。
+- 预期结果：只刷新目标账号资产并发送一条两行消息；不读取或发送其他用户数据；正文只有昨日预计理财收入和资产合计。
+
+### CRON-014 Telegram 日报收益口径
+
+- 优先级：P0
+- 测试数据：完整 USD/USDC/USDT 历史快照、非美元快照、币种为空的旧快照、组合与单笔快照覆盖不一致。
+- 预期结果：仅完整美元口径显示金额；其他情况显示无法汇总，不使用投资记录的当前币种补猜。
+
+### CRON-015 Telegram 日报租约
+
+- 优先级：P0
+- 步骤：并发领取同日任务，模拟 `FAILED`、超过 30 分钟的 `RUNNING`、旧 claimant 延迟进入发送阶段和 `DELIVERY_UNKNOWN`。
+- 预期结果：成功任务不重复；失败和过期任务可重领；只有当前 claimant 能从 `RUNNING` 原子切换为 `SENDING`；旧 claimant 不能发送或覆盖新结果；`DELIVERY_UNKNOWN` 不自动重试。
 
 ## 10. 国际化、币种和时区测试用例
 

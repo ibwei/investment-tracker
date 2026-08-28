@@ -10,8 +10,8 @@ Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. 
   - `ASSET_CREDENTIAL_ENCRYPTION_KEY`: 32-byte master key for encrypting stored CEX API Key, API Secret, and Passphrase values. Generate with `openssl rand -base64 32` and store as `base64:<output>`.
   - `CRON_SECRET`: long random string used by cron routes.
   - `RESEND_API_KEY`: Resend API key used to send investment expiry reminder emails.
-  - `TELEGRAM_BOT_TOKEN`: Telegram Bot API token used to send personal investment expiry reminders.
-  - `TELEGRAM_CHAT_ID`: personal Telegram chat ID that receives reminder bot messages.
+  - `TELEGRAM_BOT_TOKEN`: Telegram Bot API token used to send personal reminders and the daily overview.
+  - `TELEGRAM_CHAT_ID`: personal Telegram chat ID that receives bot messages.
   - `OKX_WEB3_API_KEY`: OKX Web3 API key used by the Assets on-chain provider.
   - `OKX_WEB3_API_SECRET`: OKX Web3 API secret used to sign on-chain provider requests.
   - `OKX_WEB3_PASSPHRASE`: OKX Web3 API passphrase used to sign on-chain provider requests.
@@ -22,6 +22,7 @@ Earn Compass is deployed to Cloudflare Workers through OpenNext for Cloudflare. 
   - `RESEND_FROM_EMAIL`: sender identity for reminder emails, for example `CeFiDeFi <alerts@yourdomain.com>`.
   - `APP_URL`: production app URL, for example `https://earn-compass.example.workers.dev`.
   - `NEXT_PUBLIC_APP_URL`: public app URL used by client-visible metadata and links.
+  - `TELEGRAM_REPORT_USER_EMAIL`: exact account email whose summary is sent to Telegram; no other user is selected or used as a fallback.
   - `GOOGLE_CLIENT_ID`: optional, if Google OAuth is enabled.
   - `GITHUB_CLIENT_ID`: optional, if GitHub OAuth is enabled.
 
@@ -40,23 +41,26 @@ Do not create `var.env` or `vars.env`. If one appears locally, migrate its value
 
 - `wrangler.jsonc` schedules `/api/cron/snapshots` every 12 hours with `0 */12 * * *`. This route also converts matured `ONGOING` investments into `ENDED` before capturing snapshots.
 - `wrangler.jsonc` schedules `/api/cron/investments/settle` every 4 hours, offset by 1 hour from the asset sync job, with `0 1/4 * * *`.
+- `wrangler.jsonc` schedules the all-user asset sync every 4 hours at minute 5 with `5 */4 * * *`.
 - `wrangler.jsonc` schedules `/api/cron/investments/expiry-reminders` at `02:00 UTC` and `14:00 UTC` every day.
+- On the `00:00 UTC` occurrence of the snapshot trigger, `custom-worker.js` also runs `/api/cron/telegram/daily-report` in parallel. It refreshes only the configured report user before sending.
 - Snapshot capture runs at `08:00` and `20:00` in `Asia/Shanghai`.
 - Auto-settle runs at `09:00`, `13:00`, `17:00`, `21:00`, `01:00`, and `05:00` in `Asia/Shanghai`.
 - `02:00 UTC` equals `10:00` in `Asia/Shanghai`.
 - `14:00 UTC` equals `22:00` in `Asia/Shanghai`.
 - Cloudflare calls `custom-worker.js` through the Worker `scheduled()` handler.
 - The scheduled handler forwards requests to the existing cron API routes with `Authorization: Bearer <CRON_SECRET>`.
+- The `00:00 UTC` daily-report branch starts at `08:00` in `Asia/Shanghai`; it is tracked independently from the concurrent snapshot route and is not blocked by the all-user asset sync, which starts at `00:05 UTC`.
 - The cron routes also accept `x-cron-secret` so they can be tested manually from tools like `curl` or Postman.
-- The expiry reminder route emails each active user with `ONGOING` investments twice per day at `10:00` and `22:00` in `Asia/Shanghai`. When `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are configured, the same reminder is also sent to the configured personal Telegram chat. Investments expiring in the next 24 hours are shown first, followed by the user's other active investments.
+- The expiry reminder route emails each active user with `ONGOING` investments twice per day at `10:00` and `22:00` in `Asia/Shanghai`. Telegram delivery is restricted to the user whose email exactly matches `TELEGRAM_REPORT_USER_EMAIL`; other users continue to receive only their own email. Investments expiring in the next 24 hours are shown first, followed by the target user's other active investments.
 
 ## First Production Deploy
 
 1. Keep or provision a PostgreSQL database for production.
 2. Run `npm install`.
-3. If this is a new database, run [db/schema.sql](/Users/baiwei/Desktop/berry/earn/cefidefi/db/schema.sql:1) against the intended PostgreSQL database before the first cron run.
+3. Run [db/schema.sql](/Users/baiwei/Desktop/berry/earn/cefidefi/db/schema.sql:1) against the intended PostgreSQL database before deploying this version. The idempotent schema adds `investment_daily_snapshots.currency`; existing historical rows remain null and are reported as an incomplete historical basis instead of being mislabeled as USD.
 4. Add Cloudflare runtime secrets with `wrangler secret put`, including `DATABASE_URL`, `AUTH_SECRET`, `ASSET_CREDENTIAL_ENCRYPTION_KEY`, `CRON_SECRET`, `RESEND_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and OAuth secrets if used.
-5. Configure runtime non-secret vars such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, `RESEND_FROM_EMAIL`, and OAuth client IDs in `Settings > Variables and Secrets`.
+5. Configure runtime non-secret vars such as `APP_URL`, `NEXT_PUBLIC_APP_URL`, `RESEND_FROM_EMAIL`, `TELEGRAM_REPORT_USER_EMAIL`, and OAuth client IDs in `Settings > Variables and Secrets`.
 6. In the Cloudflare Git build settings, set:
    - Build command: `npm run build`
    - Deploy command: `npx wrangler deploy`
