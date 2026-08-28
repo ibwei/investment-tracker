@@ -1,4 +1,4 @@
-export type InvestmentType = 'interest' | 'lp' | 'lending' | 'cedefi'
+export type InvestmentType = 'interest' | 'lp' | 'lending' | 'cedefi' | 'cash'
 
 export type InvestmentStatus = 'active' | 'ended' | 'early_ended' | 'deleted'
 

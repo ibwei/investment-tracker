@@ -135,6 +135,7 @@ const translations = {
       lp: 'LP',
       lending: 'Lending',
       cedefi: 'CeDeFi',
+      cash: 'Cash Yield',
     },
     statuses: {
       active: 'Active',
@@ -646,6 +647,7 @@ const translations = {
       lp: 'LP',
       lending: '借贷',
       cedefi: 'CeDeFi',
+      cash: '现金收益',
     },
     statuses: {
       active: '进行中',

@@ -23,6 +23,7 @@ const TYPE_MAP: Record<string, InvestmentType> = {
   lp: 'lp',
   lending: 'lending',
   cedefi: 'cedefi',
+  cash: 'cash',
 }
 
 const STATUS_MAP: Record<string, InvestmentStatus> = {
@@ -56,6 +57,8 @@ function mapTypeToRepository(type: InvestmentType): string {
       return 'LP'
     case 'lending':
       return 'Lending'
+    case 'cash':
+      return 'Cash'
     default:
       return 'CeDeFi'
   }

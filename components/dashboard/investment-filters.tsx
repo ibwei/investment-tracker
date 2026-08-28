@@ -65,6 +65,7 @@ export function InvestmentFilters() {
             <SelectItem value="lp">{getTypeLabel('lp')}</SelectItem>
             <SelectItem value="lending">{getTypeLabel('lending')}</SelectItem>
             <SelectItem value="cedefi">{getTypeLabel('cedefi')}</SelectItem>
+            <SelectItem value="cash">{getTypeLabel('cash')}</SelectItem>
           </SelectContent>
         </Select>
 

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { autoSettleMaturedInvestments } from "@/lib/investments";
+import {
+  autoSettleMaturedInvestments,
+  syncCnyCashYieldInvestmentsForRemoteUsers
+} from "@/lib/investments";
 import {
   captureSnapshotsForRemoteUsers,
   writeScheduledJobLog
@@ -50,6 +53,7 @@ export async function GET(request) {
 
   try {
     await autoSettleMaturedInvestments(startedAt);
+    const cnyCashYield = await syncCnyCashYieldInvestmentsForRemoteUsers(startedAt);
     const result = await captureSnapshotsForRemoteUsers(startedAt);
     const finishedAt = new Date();
 
@@ -63,7 +67,10 @@ export async function GET(request) {
       finishedAt: finishedAt.toISOString()
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      cnyCashYield
+    });
   } catch (error) {
     const finishedAt = new Date();
 

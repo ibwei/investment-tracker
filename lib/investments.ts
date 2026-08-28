@@ -2,12 +2,18 @@ import {
   INVESTMENT_STATUSES,
   isBlank,
   parseDateInput,
+  roundNumber,
   toNullableNumber
 } from "@/lib/calculations";
-import { execute, query, queryOne } from "@/lib/db";
+import { execute, query, queryOne, withTransaction } from "@/lib/db";
 import { buildDashboardSnapshot } from "@/lib/snapshot";
-import { toUtcISOString } from "@/lib/time";
+import { toAppDateKey, toUtcISOString } from "@/lib/time";
 import { getUserTimeZone } from "@/lib/users";
+
+const CNY_CASH_YIELD_MARKER = "AUTO_CNY_CASH_YIELD";
+const CNY_CASH_YIELD_PROJECT = "人民币现金";
+const CNY_CASH_YIELD_ASSET_NAME = "人民币现金收益";
+const CNY_CASH_YIELD_APR = 1;
 
 function assert(condition, message, status = 400) {
   if (!condition) {
@@ -53,6 +59,31 @@ function normalizeStatus(value) {
 
 function currentTimestamp() {
   return new Date().toISOString();
+}
+
+function calculateFixedAprIncome(amount, apr) {
+  const dailyIncome = amount > 0 && apr > 0 ? (amount * apr) / 100 / 365 : 0;
+
+  return {
+    dailyIncome: roundNumber(dailyIncome),
+    weeklyIncome: roundNumber(dailyIncome * 7),
+    monthlyIncome: roundNumber(dailyIncome * 30),
+    yearlyIncome: roundNumber((amount * apr) / 100)
+  };
+}
+
+function getLastYieldDate(remark) {
+  const match = String(remark ?? "").match(/last_yield_date=(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? null;
+}
+
+function buildCnyCashYieldRemark(amountCny, snapshotDate) {
+  return [
+    "自动从人民币现金手动资产同步。",
+    `人民币现金本金 CNY ${roundNumber(amountCny).toFixed(2)}。`,
+    `APR ${CNY_CASH_YIELD_APR}%。`,
+    `last_yield_date=${snapshotDate}`
+  ].join(" ");
 }
 
 function shouldAutoSettle(record, referenceDate = new Date()) {
@@ -244,6 +275,199 @@ export async function autoSettleMaturedInvestments(referenceDate = new Date()) {
     checkedCount: candidates.length,
     settledCount: result.rowCount ?? 0,
     settledIds: maturedIds
+  };
+}
+
+export async function syncCnyCashYieldInvestment(
+  userId,
+  capturedAt = new Date(),
+  timeZoneInput = undefined
+) {
+  const normalizedUserId = normalizeUserId(userId);
+  const timeZone = timeZoneInput ?? await getUserTimeZone(normalizedUserId);
+  const snapshotDate = toAppDateKey(capturedAt, timeZone);
+  const now = currentTimestamp();
+
+  return withTransaction(async (client) => {
+    const cashResult = await client.query<{
+      amountCny: number | string | null;
+      valueUsd: number | string | null;
+      assetCount: number | string;
+    }>(
+      `
+        select
+          coalesce(sum(amount), 0)::text as "amountCny",
+          coalesce(sum(value_usd), 0)::text as "valueUsd",
+          count(*)::text as "assetCount"
+        from manual_assets
+        where user_id = $1 and is_deleted = false and type = 'CASH'
+      `,
+      [normalizedUserId]
+    );
+
+    const cashSummary = cashResult.rows[0];
+    const amountCny = Number(cashSummary?.amountCny ?? 0);
+    const valueUsd = Number(cashSummary?.valueUsd ?? 0);
+    const assetCount = Number(cashSummary?.assetCount ?? 0);
+
+    if (!Number.isFinite(valueUsd) || valueUsd <= 0 || assetCount === 0) {
+      return {
+        userId: normalizedUserId,
+        snapshotDate,
+        skipped: true,
+        reason: "NO_CNY_CASH_ASSETS",
+        assetCount,
+        amountCny: Number.isFinite(amountCny) ? roundNumber(amountCny) : 0,
+        valueUsd: 0
+      };
+    }
+
+    const income = calculateFixedAprIncome(valueUsd, CNY_CASH_YIELD_APR);
+    const existingResult = await client.query(
+      `
+        select ${INVESTMENT_FIELDS}
+        from investments
+        where user_id = $1
+          and is_deleted = false
+          and allocation_note = $2
+        order by id asc
+        limit 1
+        for update
+      `,
+      [normalizedUserId, CNY_CASH_YIELD_MARKER]
+    );
+    const existing = existingResult.rows[0] ? mapRecord(existingResult.rows[0]) : null;
+    const lastYieldDate = getLastYieldDate(existing?.remark);
+    const previousTotalIncome = Number(existing?.incomeTotal ?? 0);
+    const shouldAccrueToday = !existing || lastYieldDate !== snapshotDate;
+    const incomeTotal = roundNumber(
+      shouldAccrueToday
+        ? previousTotalIncome + income.dailyIncome
+        : previousTotalIncome
+    );
+    const remark = buildCnyCashYieldRemark(amountCny, snapshotDate);
+
+    if (existing) {
+      const record = await client.query(
+        `
+          update investments
+          set
+            project = $1,
+            asset_name = $2,
+            type = 'Cash',
+            amount = $3,
+            currency = 'USD',
+            apr_expected = $4,
+            apr_actual = $4,
+            income_total = $5,
+            income_daily = $6,
+            income_weekly = $7,
+            income_monthly = $8,
+            income_yearly = $9,
+            status = 'ONGOING',
+            end_time = null,
+            remark = $10,
+            updated_at = $11
+          where id = $12 and user_id = $13
+          returning ${INVESTMENT_FIELDS}
+        `,
+        [
+          CNY_CASH_YIELD_PROJECT,
+          CNY_CASH_YIELD_ASSET_NAME,
+          valueUsd,
+          CNY_CASH_YIELD_APR,
+          incomeTotal,
+          income.dailyIncome,
+          income.weeklyIncome,
+          income.monthlyIncome,
+          income.yearlyIncome,
+          remark,
+          now,
+          existing.id,
+          normalizedUserId
+        ]
+      );
+
+      return {
+        userId: normalizedUserId,
+        snapshotDate,
+        created: false,
+        accrued: shouldAccrueToday,
+        assetCount,
+        amountCny: roundNumber(amountCny),
+        valueUsd: roundNumber(valueUsd),
+        record: mapRecord(record.rows[0])
+      };
+    }
+
+    const record = await client.query(
+      `
+        insert into investments (
+          user_id, project, asset_name, type, amount, currency, allocation_note,
+          start_time, apr_expected, apr_actual, income_total, income_daily,
+          income_weekly, income_monthly, income_yearly, status, remark, created_at, updated_at
+        )
+        values (
+          $1, $2, $3, 'Cash', $4, 'USD', $5,
+          $6, $7, $7, $8, $9,
+          $10, $11, $12, 'ONGOING', $13, $14, $14
+        )
+        returning ${INVESTMENT_FIELDS}
+      `,
+      [
+        normalizedUserId,
+        CNY_CASH_YIELD_PROJECT,
+        CNY_CASH_YIELD_ASSET_NAME,
+        valueUsd,
+        CNY_CASH_YIELD_MARKER,
+        toUtcISOString(capturedAt, timeZone),
+        CNY_CASH_YIELD_APR,
+        income.dailyIncome,
+        income.dailyIncome,
+        income.weeklyIncome,
+        income.monthlyIncome,
+        income.yearlyIncome,
+        remark,
+        now
+      ]
+    );
+
+    return {
+      userId: normalizedUserId,
+      snapshotDate,
+      created: true,
+      accrued: true,
+      assetCount,
+      amountCny: roundNumber(amountCny),
+      valueUsd: roundNumber(valueUsd),
+      record: mapRecord(record.rows[0])
+    };
+  });
+}
+
+export async function syncCnyCashYieldInvestmentsForRemoteUsers(capturedAt = new Date()) {
+  const users = await query<{ id: number; timezone: string }>(
+    `
+      select id, timezone
+      from users
+      where storage_mode = 'REMOTE'
+      order by id asc
+    `
+  );
+
+  const results = [];
+
+  for (const user of users) {
+    results.push(await syncCnyCashYieldInvestment(user.id, capturedAt, user.timezone));
+  }
+
+  return {
+    processedUsers: users.length,
+    updatedCount: results.filter((result) => !result.skipped).length,
+    accruedCount: results.filter((result) => result.accrued).length,
+    createdCount: results.filter((result) => result.created).length,
+    skippedCount: results.filter((result) => result.skipped).length,
+    results
   };
 }
 

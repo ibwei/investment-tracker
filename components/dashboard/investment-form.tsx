@@ -39,7 +39,7 @@ function createInvestmentSchema(t: (key: string) => string) {
     project: z.string().min(1, t('validation.projectRequired')),
     name: z.string().min(1, t('validation.nameRequired')),
     url: z.string().url(t('validation.urlInvalid')).or(z.literal('')),
-    type: z.enum(['interest', 'lp', 'lending', 'cedefi']),
+    type: z.enum(['interest', 'lp', 'lending', 'cedefi', 'cash']),
     amount: z.coerce.number().min(0.01, t('validation.amountPositive')),
     currency: z.string().min(1, t('validation.currencyRequired')),
     description: z.string(),
@@ -251,6 +251,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
                         <SelectItem value="lp">{getTypeLabel('lp')}</SelectItem>
                         <SelectItem value="lending">{getTypeLabel('lending')}</SelectItem>
                         <SelectItem value="cedefi">{getTypeLabel('cedefi')}</SelectItem>
+                        <SelectItem value="cash">{getTypeLabel('cash')}</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

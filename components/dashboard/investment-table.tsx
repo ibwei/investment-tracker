@@ -65,7 +65,8 @@ const typeColors: Record<string, string> = {
   interest: 'bg-chart-1/20 text-chart-1 border-chart-1/30',
   lp: 'bg-chart-2/20 text-chart-2 border-chart-2/30',
   lending: 'bg-chart-3/20 text-chart-3 border-chart-3/30',
-  cedefi: 'bg-chart-4/20 text-chart-4 border-chart-4/30'
+  cedefi: 'bg-chart-4/20 text-chart-4 border-chart-4/30',
+  cash: 'bg-chart-5/20 text-chart-5 border-chart-5/30'
 }
 
 const statusColors: Record<string, string> = {
@@ -185,7 +186,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
   const endInvestment = useInvestmentStore((state) => state.endInvestment)
   const {
     t,
-    formatCurrency,
+    formatDisplayCurrency,
     formatDate,
     getDeleteConfirmationKeyword,
     getStatusLabel,
@@ -545,7 +546,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                             {getTypeLabel(investment.type)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(investment.amount)}</TableCell>
+                        <TableCell className="text-right font-mono">{formatDisplayCurrency(investment.amount)}</TableCell>
                         <TableCell className="text-right font-mono">{investment.expectedApr.toFixed(1)}%</TableCell>
                         <TableCell className="text-right font-mono">
                           <span className={cn(investment.actualApr >= investment.expectedApr ? 'text-success' : 'text-warning')}>
@@ -553,15 +554,15 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                           </span>
                         </TableCell>
                         <TableCell className="text-right font-mono text-success">
-                          {formatCurrency(investment.dailyIncome)}
+                          {formatDisplayCurrency(investment.dailyIncome)}
                         </TableCell>
                         <TableCell className="text-right font-mono text-success hidden lg:table-cell">
-                          {formatCurrency(investment.weeklyIncome)}
+                          {formatDisplayCurrency(investment.weeklyIncome)}
                         </TableCell>
                         <TableCell className="text-right font-mono text-success hidden xl:table-cell">
-                          {formatCurrency(investment.monthlyIncome)}
+                          {formatDisplayCurrency(investment.monthlyIncome)}
                         </TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(investment.totalIncome)}</TableCell>
+                        <TableCell className="text-right font-mono">{formatDisplayCurrency(investment.totalIncome)}</TableCell>
                         <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
                           {formatDate(investment.startDate)}
                         </TableCell>
@@ -680,7 +681,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                             {getTypeLabel(investment.type)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(investment.amount)}</TableCell>
+                        <TableCell className="text-right font-mono">{formatDisplayCurrency(investment.amount)}</TableCell>
                         <TableCell className="text-right font-mono">{investment.expectedApr.toFixed(1)}%</TableCell>
                         <TableCell className="text-right font-mono">
                           <span className={cn(investment.actualApr >= investment.expectedApr ? 'text-success' : 'text-warning')}>
@@ -689,7 +690,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                         </TableCell>
                         <TableCell className="text-right font-mono">
                           <div className="flex flex-col items-end">
-                            <span>{formatCurrency(investment.totalIncome)}</span>
+                            <span>{formatDisplayCurrency(investment.totalIncome)}</span>
                             <span className="text-xs text-muted-foreground">{t('table.finalSettlement')}</span>
                           </div>
                         </TableCell>
@@ -702,7 +703,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                         <TableCell className="hidden 2xl:table-cell">
                           <div className="flex min-w-[220px] flex-col gap-1 text-xs">
                             <span className="font-medium text-foreground">
-                              {t('table.finalSettlement')}: {formatCurrency(investment.totalIncome)}
+                              {t('table.finalSettlement')}: {formatDisplayCurrency(investment.totalIncome)}
                             </span>
                             {investment.status === 'early_ended' ? (
                               <span className="text-muted-foreground">
@@ -760,9 +761,9 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
               </p>
               <p>
                 {t('table.deleteAmount', {
-                  amount: deleteDialog ? formatCurrency(deleteDialog.amount) : '',
-                }).split(deleteDialog ? formatCurrency(deleteDialog.amount) : '')[0]}
-                <strong>{deleteDialog && formatCurrency(deleteDialog.amount)}</strong>
+                  amount: deleteDialog ? formatDisplayCurrency(deleteDialog.amount) : '',
+                }).split(deleteDialog ? formatDisplayCurrency(deleteDialog.amount) : '')[0]}
+                <strong>{deleteDialog && formatDisplayCurrency(deleteDialog.amount)}</strong>
               </p>
               <p className="text-destructive">
                 {t('table.deletePermanent')}
@@ -918,7 +919,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                   />
                   <p className="text-xs text-muted-foreground">
                     {t('table.projectedDailyIncome', {
-                      amount: formatCurrency(endDailyIncome),
+                      amount: formatDisplayCurrency(endDailyIncome),
                     })}
                   </p>
                 </div>
