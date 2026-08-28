@@ -79,12 +79,14 @@ function calculatePlannedDays(record, timeZone = undefined) {
 
 export function calculateInvestmentMetrics(record, referenceDate = new Date(), timeZone = undefined) {
   const amount = toNullableNumber(record.amount) ?? 0;
-  const expectedApr = toNullableNumber(record.aprExpected) ?? 0;
+  const expectedAprInput = toNullableNumber(record.aprExpected);
+  const expectedApr = expectedAprInput ?? 0;
   const actualAprInput = toNullableNumber(record.aprActual);
   const holdingDays = calculateHoldingDays(record, referenceDate, timeZone);
   const plannedDays = calculatePlannedDays(record, timeZone);
   const isOngoing = record.status === "ONGOING";
-  const shouldDeriveZeroIncome = isOngoing && amount > 0 && expectedApr > 0;
+  const ongoingApr = expectedAprInput ?? actualAprInput ?? 0;
+  const shouldDeriveZeroIncome = isOngoing && amount > 0 && ongoingApr > 0;
   const incomeNumber = (value) => {
     const parsed = toNullableNumber(value);
     return shouldDeriveZeroIncome && parsed === 0 ? null : parsed;
@@ -97,7 +99,7 @@ export function calculateInvestmentMetrics(record, referenceDate = new Date(), t
       : null;
 
   const effectiveApr = isOngoing
-    ? expectedApr
+    ? ongoingApr
     : actualAprInput ?? derivedActualAprFromTotal ?? expectedApr;
 
   const autoDaily =
