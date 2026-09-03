@@ -217,7 +217,7 @@ Key APIs:
 - `GET /api/cron/snapshots`
 - `GET /api/cron/investments/expiry-reminders`
 - `GET /api/cron/assets/sync`
-- `GET /api/cron/telegram/daily-report`
+- `GET|POST /api/cron/telegram/daily-report`
 
 ## Cron Jobs
 

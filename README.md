@@ -241,7 +241,7 @@ custom-worker.js         OpenNext Worker 入口与 scheduled handler
 - `GET /api/cron/assets/sync`
 - `GET /api/cron/investments/settle`
 - `GET /api/cron/investments/expiry-reminders`
-- `GET /api/cron/telegram/daily-report`
+- `GET|POST /api/cron/telegram/daily-report`
 
 ## 部署
 

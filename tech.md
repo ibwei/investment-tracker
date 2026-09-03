@@ -689,7 +689,7 @@ Cron API 使用 `CRON_SECRET` 鉴权，支持：
 - `GET /api/cron/assets/sync`
   - 同步所有 `ACTIVE`、`FAILED`、`PENDING` 资产来源
   - 写入 `scheduled_job_logs`，jobName 为 `asset-source-sync`
-- `GET /api/cron/telegram/daily-report`
+- `GET|POST /api/cron/telegram/daily-report`
   - 只读取 `TELEGRAM_REPORT_USER_EMAIL` 精确匹配的 `ACTIVE + REMOTE` 用户，不遍历、不回退其他用户
   - 发送前只刷新目标用户的资产来源，不等待其他用户的全量资产同步
   - 消息严格只推送昨日预计理财收入和当前资产合计两行，不包含日期、投资或资产明细
