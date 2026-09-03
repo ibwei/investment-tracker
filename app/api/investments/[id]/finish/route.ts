@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSameOriginSession } from "@/lib/auth";
 import {
   finishInvestment,
-  getDashboardSnapshot
+  getDashboardSnapshotWithRecord
 } from "@/lib/investments";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,7 @@ export async function POST(request, context) {
     const record = await finishInvestment(session.userId, id, body);
     return NextResponse.json({
       record,
-      snapshot: await getDashboardSnapshot(session.userId)
+      snapshot: await getDashboardSnapshotWithRecord(session.userId, record)
     });
   } catch (error) {
     return handleRouteError(error);

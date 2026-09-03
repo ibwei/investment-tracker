@@ -239,6 +239,33 @@ export async function getDashboardSnapshot(userId) {
   return buildDashboardSnapshot(rows.map(mapRecord), new Date(), timeZone);
 }
 
+export async function getDashboardSnapshotWithRecord(userId, record) {
+  const [timeZone, rows] = await Promise.all([
+    getUserTimeZone(userId),
+    fetchRows(userId)
+  ]);
+  const records = [
+    record,
+    ...rows
+      .map(mapRecord)
+      .filter((item) => String(item.id) !== String(record.id))
+  ];
+
+  return buildDashboardSnapshot(records, new Date(), timeZone);
+}
+
+export async function getDashboardSnapshotWithoutRecord(userId, removedId) {
+  const [timeZone, rows] = await Promise.all([
+    getUserTimeZone(userId),
+    fetchRows(userId)
+  ]);
+  const records = rows
+    .map(mapRecord)
+    .filter((item) => String(item.id) !== String(removedId));
+
+  return buildDashboardSnapshot(records, new Date(), timeZone);
+}
+
 export async function autoSettleMaturedInvestments(referenceDate = new Date()) {
   const candidates = await query<{ id: number; endTime: string | null; status: string }>(
     `

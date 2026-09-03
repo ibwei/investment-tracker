@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireSameOriginSession } from "@/lib/auth";
 import {
-  getDashboardSnapshot,
+  getDashboardSnapshotWithRecord,
+  getDashboardSnapshotWithoutRecord,
   softDeleteInvestment,
   updateInvestment
 } from "@/lib/investments";
@@ -37,7 +38,7 @@ export async function PATCH(request, context) {
     const record = await updateInvestment(session.userId, id, body);
     return NextResponse.json({
       record,
-      snapshot: await getDashboardSnapshot(session.userId)
+      snapshot: await getDashboardSnapshotWithRecord(session.userId, record)
     });
   } catch (error) {
     return handleRouteError(error);
@@ -52,7 +53,7 @@ export async function DELETE(request, context) {
     await softDeleteInvestment(session.userId, id, body?.confirmationText);
     return NextResponse.json({
       success: true,
-      snapshot: await getDashboardSnapshot(session.userId)
+      snapshot: await getDashboardSnapshotWithoutRecord(session.userId, id)
     });
   } catch (error) {
     return handleRouteError(error);

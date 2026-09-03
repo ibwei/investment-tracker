@@ -3,10 +3,9 @@ import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import {
   clearAllInvestments,
   createInvestment,
-  getDashboardSnapshot
+  getDashboardSnapshot,
+  getDashboardSnapshotWithRecord
 } from "@/lib/investments";
-import { buildDashboardSnapshot } from "@/lib/snapshot";
-import { getUserTimeZone } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,20 +18,6 @@ function handleRouteError(error) {
     },
     { status }
   );
-}
-
-async function includeCreatedRecordInSnapshot(userId, snapshot, record) {
-  if (snapshot.records.some((item) => String(item.id) === String(record.id))) {
-    return snapshot;
-  }
-
-  const timeZone = await getUserTimeZone(userId);
-  const records = [
-    record,
-    ...snapshot.records.filter((item) => String(item.id) !== String(record.id))
-  ];
-
-  return buildDashboardSnapshot(records, new Date(), timeZone);
 }
 
 export async function GET() {
@@ -49,15 +34,10 @@ export async function POST(request) {
     const session = await requireSameOriginSession(request);
     const body = await request.json();
     const record = await createInvestment(session.userId, body);
-    const snapshot = await includeCreatedRecordInSnapshot(
-      session.userId,
-      await getDashboardSnapshot(session.userId),
-      record
-    );
 
     return NextResponse.json({
       record,
-      snapshot
+      snapshot: await getDashboardSnapshotWithRecord(session.userId, record)
     });
   } catch (error) {
     return handleRouteError(error);

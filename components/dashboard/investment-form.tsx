@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { toast } from 'sonner'
 import * as z from 'zod'
 import { Investment, InvestmentType } from '@/lib/types'
 import { useInvestmentStore } from '@/lib/store'
@@ -160,12 +161,18 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
   const onSubmit = async (values: any) => {
     const data = investmentSchema.parse(values) as FormData
 
-    if (investment) {
-      await updateInvestment(investment.id, data)
-    } else {
-      await addInvestment(data as Required<FormData>)
+    try {
+      if (investment) {
+        await updateInvestment(investment.id, data)
+        toast.success(t('form.updateSuccess'))
+      } else {
+        await addInvestment(data as Required<FormData>)
+        toast.success(t('form.addSuccess'))
+      }
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('form.saveFailed'))
     }
-    onOpenChange(false)
   }
 
   return (

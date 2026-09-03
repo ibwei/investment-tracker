@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { useInvestmentStore } from '@/lib/store'
 import { useI18n } from '@/lib/i18n'
 import type { EndInvestmentData, Investment, SortField, SortDirection } from '@/lib/types'
@@ -267,6 +268,9 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
         await deleteInvestment(deleteDialog.id)
         setDeleteDialog(null)
         setDeleteConfirm('')
+        toast.success(t('table.deleteSuccess'))
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t('table.deleteFailed'))
       } finally {
         setIsDeletePending(false)
       }
@@ -286,6 +290,9 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
       try {
         await endInvestment(endDialog.investment.id, payload)
         setEndDialog(null)
+        toast.success(t('table.endSuccess'))
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t('table.endFailed'))
       } finally {
         setIsEndPending(false)
       }
