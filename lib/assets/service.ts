@@ -21,7 +21,6 @@ import {
 
 const DEFAULT_LIMIT = 20;
 const MAX_PAGE_SIZE = 50;
-const MAX_SOURCES_PER_USER = 10;
 const MAX_MANUAL_ASSETS_PER_USER = 50;
 const SYNC_ALL_CONCURRENCY = 3;
 const VALID_BALANCE_CATEGORIES = new Set<NormalizedAssetBalance["category"]>([
@@ -474,14 +473,6 @@ function finalizeSummaryTopAssetGroups(groups: Map<string, SummaryTopAssetGroup>
     }))
     .sort((left, right) => right.valueUsd - left.valueUsd)
     .slice(0, 5);
-}
-
-async function countActiveSources(userId: number) {
-  const result = await queryOne<{ count: string }>(
-    `select count(*)::text as count from asset_sources where user_id = $1`,
-    [userId]
-  );
-  return Number(result?.count ?? 0);
 }
 
 async function countActiveManualAssets(userId: number) {
@@ -1271,9 +1262,6 @@ function createSourceSyncFailedError(error: unknown) {
 
 export async function createAssetSource(userId: number, input: Record<string, unknown>) {
   const normalizedUserId = normalizeUserId(userId);
-  const totalSources = await countActiveSources(normalizedUserId);
-  assert(totalSources < MAX_SOURCES_PER_USER, "Source limit reached.", 400);
-
   const payload = validateSourceInput(input);
   await assertUniqueAssetSource(normalizedUserId, payload);
 

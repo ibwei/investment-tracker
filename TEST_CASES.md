@@ -413,11 +413,11 @@
 - 步骤：publicRef 为空创建或更新 On-chain source。
 - 预期结果：返回 400；数据库无变化。
 
-### AST-008 Source 数量上限
+### AST-008 Source 数量不设上限
 
 - 优先级：P0
-- 步骤：同一用户已有 10 个 source 后继续创建。
-- 预期结果：返回 `Source limit reached.`；不会创建第 11 个；其他用户不受影响。
+- 步骤：同一用户已有 10 个 source 后继续创建第 11 个。
+- 预期结果：第 11 个 source 可正常创建；其他用户的数据不受影响。
 
 ### AST-009 查询 Sources 分页筛选排序
 
