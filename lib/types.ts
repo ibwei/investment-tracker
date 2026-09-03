@@ -25,6 +25,7 @@ export interface Investment {
   status: InvestmentStatus
   isDeleted: boolean
   createdAt: string
+  managedBy?: 'assets' | null
 }
 
 export interface InvestmentFormData {

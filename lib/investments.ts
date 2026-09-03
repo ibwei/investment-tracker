@@ -5,9 +5,9 @@ import {
   roundNumber,
   toNullableNumber
 } from "@/lib/calculations";
-import { execute, query, queryOne, withTransaction } from "@/lib/db";
+import { execute, query, withConnection, withTransaction } from "@/lib/db";
 import { buildDashboardSnapshot } from "@/lib/snapshot";
-import { toAppDateKey, toUtcISOString } from "@/lib/time";
+import { resolveAppTimeZone, toAppDateKey, toUtcISOString } from "@/lib/time";
 import { getUserTimeZone } from "@/lib/users";
 
 const CNY_CASH_YIELD_MARKER = "AUTO_CNY_CASH_YIELD";
@@ -163,7 +163,8 @@ function mapRecord(record) {
     remark: record.remark,
     isDeleted: record.isDeleted,
     createdAt: record.createdAt,
-    updatedAt: record.updatedAt
+    updatedAt: record.updatedAt,
+    managedBy: record.allocationNote === CNY_CASH_YIELD_MARKER ? "assets" : null
   };
 }
 
@@ -203,10 +204,10 @@ function readFreshnessKey() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-async function fetchRows(userId) {
+async function fetchRowsWithClient(client, userId) {
   const freshnessKey = readFreshnessKey();
 
-  return query(
+  const result = await client.query(
     `
       /* investment-read:${freshnessKey} */
       select ${INVESTMENT_FIELDS}
@@ -216,54 +217,74 @@ async function fetchRows(userId) {
     `,
     [normalizeUserId(userId)]
   );
+
+  return result.rows;
 }
 
-async function fetchRowById(id, userId) {
+async function fetchInvestmentContextWithClient(client, id, userId) {
   const freshnessKey = readFreshnessKey();
-
-  return queryOne(
+  const result = await client.query(
     `
       /* investment-row-read:${freshnessKey} */
-      select ${INVESTMENT_FIELDS}
-      from investments
-      where id = $1 and user_id = $2
-      limit 1
+      select investment_record.*, users.timezone as "userTimeZone"
+      from (
+        select ${INVESTMENT_FIELDS}
+        from investments
+        where id = $1 and user_id = $2
+        limit 1
+      ) investment_record
+      join users on users.id = investment_record."userId"
     `,
     [id, normalizeUserId(userId)]
   );
+
+  const row = result.rows[0] ?? null;
+  return {
+    row,
+    timeZone: resolveAppTimeZone(row?.userTimeZone)
+  };
+}
+
+async function getUserTimeZoneWithClient(client, userId) {
+  const result = await client.query(
+    `select timezone from users where id = $1 limit 1`,
+    [normalizeUserId(userId)]
+  );
+
+  return resolveAppTimeZone(result.rows[0]?.timezone);
+}
+
+async function buildDashboardSnapshotWithClient(
+  client,
+  userId,
+  {
+    timeZone,
+    record = null,
+    removedId = null
+  }: { timeZone?: string; record?: any; removedId?: string | number | null } = {}
+) {
+  const resolvedTimeZone = timeZone ?? await getUserTimeZoneWithClient(client, userId);
+  const rows = await fetchRowsWithClient(client, userId);
+  let records = rows.map(mapRecord);
+
+  if (record) {
+    records = [
+      record,
+      ...records.filter((item) => String(item.id) !== String(record.id))
+    ];
+  }
+
+  if (removedId !== null) {
+    records = records.filter((item) => String(item.id) !== String(removedId));
+  }
+
+  return buildDashboardSnapshot(records, new Date(), resolvedTimeZone);
 }
 
 export async function getDashboardSnapshot(userId) {
-  const timeZone = await getUserTimeZone(userId);
-  const rows = await fetchRows(userId);
-  return buildDashboardSnapshot(rows.map(mapRecord), new Date(), timeZone);
-}
-
-export async function getDashboardSnapshotWithRecord(userId, record) {
-  const [timeZone, rows] = await Promise.all([
-    getUserTimeZone(userId),
-    fetchRows(userId)
-  ]);
-  const records = [
-    record,
-    ...rows
-      .map(mapRecord)
-      .filter((item) => String(item.id) !== String(record.id))
-  ];
-
-  return buildDashboardSnapshot(records, new Date(), timeZone);
-}
-
-export async function getDashboardSnapshotWithoutRecord(userId, removedId) {
-  const [timeZone, rows] = await Promise.all([
-    getUserTimeZone(userId),
-    fetchRows(userId)
-  ]);
-  const records = rows
-    .map(mapRecord)
-    .filter((item) => String(item.id) !== String(removedId));
-
-  return buildDashboardSnapshot(records, new Date(), timeZone);
+  return withConnection(async (client) =>
+    buildDashboardSnapshotWithClient(client, userId)
+  );
 }
 
 export async function autoSettleMaturedInvestments(referenceDate = new Date()) {
@@ -499,12 +520,14 @@ export async function syncCnyCashYieldInvestmentsForRemoteUsers(capturedAt = new
 }
 
 export async function createInvestment(userId, input) {
-  const timeZone = await getUserTimeZone(userId);
-  const normalized = normalizeInvestmentInput(input, null, timeZone);
-  const now = currentTimestamp();
+  const normalizedUserId = normalizeUserId(userId);
 
-  const record = await queryOne(
-    `
+  return withTransaction(async (client) => {
+    const timeZone = await getUserTimeZoneWithClient(client, normalizedUserId);
+    const normalized = normalizeInvestmentInput(input, null, timeZone);
+    const now = currentTimestamp();
+    const result = await client.query(
+      `
       insert into investments (
         user_id, project, asset_name, url, type, amount, currency, allocation_note,
         start_time, end_time, apr_expected, apr_actual, income_total, income_daily,
@@ -516,46 +539,63 @@ export async function createInvestment(userId, input) {
         $15, $16, $17, $18, $19, $20, $20
       )
       returning ${INVESTMENT_FIELDS}
-    `,
-    [
-      normalizeUserId(userId),
-      normalized.project,
-      normalized.assetName,
-      normalized.url,
-      normalized.type,
-      normalized.amount,
-      normalized.currency,
-      normalized.allocationNote,
-      normalized.startTime,
-      normalized.endTime,
-      normalized.aprExpected,
-      normalized.aprActual,
-      normalized.incomeTotal,
-      normalized.incomeDaily,
-      normalized.incomeWeekly,
-      normalized.incomeMonthly,
-      normalized.incomeYearly,
-      normalized.status,
-      normalized.remark,
-      now
-    ]
-  );
+      `,
+      [
+        normalizedUserId,
+        normalized.project,
+        normalized.assetName,
+        normalized.url,
+        normalized.type,
+        normalized.amount,
+        normalized.currency,
+        normalized.allocationNote,
+        normalized.startTime,
+        normalized.endTime,
+        normalized.aprExpected,
+        normalized.aprActual,
+        normalized.incomeTotal,
+        normalized.incomeDaily,
+        normalized.incomeWeekly,
+        normalized.incomeMonthly,
+        normalized.incomeYearly,
+        normalized.status,
+        normalized.remark,
+        now
+      ]
+    );
+    const record = mapRecord(result.rows[0]);
 
-  return mapRecord(record);
+    return {
+      record,
+      snapshot: await buildDashboardSnapshotWithClient(client, normalizedUserId, {
+        timeZone,
+        record
+      })
+    };
+  });
 }
 
 export async function updateInvestment(userId, id, input) {
   const normalizedUserId = normalizeUserId(userId);
-  const existing = await fetchRowById(id, normalizedUserId);
-  assert(existing, "记录不存在。", 404);
 
-  const currentRecord = mapRecord(existing);
-  const timeZone = await getUserTimeZone(userId);
-  const normalized = normalizeInvestmentInput(input, currentRecord, timeZone);
-  const now = currentTimestamp();
+  return withTransaction(async (client) => {
+    const { row: existing, timeZone } = await fetchInvestmentContextWithClient(
+      client,
+      id,
+      normalizedUserId
+    );
+    assert(existing, "记录不存在。", 404);
+    assert(
+      existing.allocationNote !== CNY_CASH_YIELD_MARKER,
+      "该仓位由人民币现金资产自动同步，请前往资产页管理。",
+      409
+    );
 
-  const record = await queryOne(
-    `
+    const currentRecord = mapRecord(existing);
+    const normalized = normalizeInvestmentInput(input, currentRecord, timeZone);
+    const now = currentTimestamp();
+    const result = await client.query(
+      `
       update investments
       set
         project = $1,
@@ -579,74 +619,145 @@ export async function updateInvestment(userId, id, input) {
         updated_at = $19
       where id = $20 and user_id = $21
       returning ${INVESTMENT_FIELDS}
-    `,
-    [
-      normalized.project,
-      normalized.assetName,
-      normalized.url,
-      normalized.type,
-      normalized.amount,
-      normalized.currency,
-      normalized.allocationNote,
-      normalized.startTime,
-      normalized.endTime,
-      normalized.aprExpected,
-      normalized.aprActual,
-      normalized.incomeTotal,
-      normalized.incomeDaily,
-      normalized.incomeWeekly,
-      normalized.incomeMonthly,
-      normalized.incomeYearly,
-      normalized.status,
-      normalized.remark,
-      now,
-      id,
-      normalizedUserId
-    ]
-  );
+      `,
+      [
+        normalized.project,
+        normalized.assetName,
+        normalized.url,
+        normalized.type,
+        normalized.amount,
+        normalized.currency,
+        normalized.allocationNote,
+        normalized.startTime,
+        normalized.endTime,
+        normalized.aprExpected,
+        normalized.aprActual,
+        normalized.incomeTotal,
+        normalized.incomeDaily,
+        normalized.incomeWeekly,
+        normalized.incomeMonthly,
+        normalized.incomeYearly,
+        normalized.status,
+        normalized.remark,
+        now,
+        id,
+        normalizedUserId
+      ]
+    );
+    const record = mapRecord(result.rows[0]);
 
-  return mapRecord(record);
+    return {
+      record,
+      snapshot: await buildDashboardSnapshotWithClient(client, normalizedUserId, {
+        timeZone,
+        record
+      })
+    };
+  });
 }
 
 export async function finishInvestment(userId, id, input) {
-  const existing = await fetchRowById(id, userId);
-  assert(existing, "记录不存在。", 404);
+  const normalizedUserId = normalizeUserId(userId);
 
-  const currentRecord = mapRecord(existing);
-  const nextStatus = normalizeStatus(input.status ?? "EARLY_ENDED");
-  assert(nextStatus !== "ONGOING", "结束操作必须指定已结束状态。");
+  return withTransaction(async (client) => {
+    const { row: existing, timeZone } = await fetchInvestmentContextWithClient(
+      client,
+      id,
+      normalizedUserId
+    );
+    assert(existing, "记录不存在。", 404);
+    assert(
+      existing.allocationNote !== CNY_CASH_YIELD_MARKER,
+      "该仓位由人民币现金资产自动同步，请前往资产页管理。",
+      409
+    );
 
-  return updateInvestment(userId, id, {
-    ...currentRecord,
-    ...input,
-    status: nextStatus,
-    endTime: input.endTime ?? currentRecord.endTime ?? toUtcISOString(new Date())
+    const currentRecord = mapRecord(existing);
+    const nextStatus = normalizeStatus(input.status ?? "EARLY_ENDED");
+    assert(nextStatus !== "ONGOING", "结束操作必须指定已结束状态。");
+    const endTime = normalizeDate(
+      input.endTime ?? currentRecord.endTime ?? new Date(),
+      { required: true, timeZone }
+    );
+    const now = currentTimestamp();
+    const result = await client.query(
+      `
+        update investments
+        set
+          status = $1,
+          end_time = $2,
+          apr_actual = $3,
+          income_total = $4,
+          remark = $5,
+          updated_at = $6
+        where id = $7 and user_id = $8
+        returning ${INVESTMENT_FIELDS}
+      `,
+      [
+        nextStatus,
+        endTime,
+        toNullableNumber(input.aprActual ?? currentRecord.aprActual),
+        toNullableNumber(input.incomeTotal ?? currentRecord.incomeTotal),
+        normalizeText(input.remark ?? currentRecord.remark),
+        now,
+        id,
+        normalizedUserId
+      ]
+    );
+    const record = mapRecord(result.rows[0]);
+
+    return {
+      record,
+      snapshot: await buildDashboardSnapshotWithClient(client, normalizedUserId, {
+        timeZone,
+        record
+      })
+    };
   });
 }
 
 export async function softDeleteInvestment(userId, id, confirmationText) {
   const normalizedUserId = normalizeUserId(userId);
-  const existing = await fetchRowById(id, normalizedUserId);
-  assert(existing, "记录不存在。", 404);
   assert(
     normalizeText(confirmationText).toUpperCase() === "DELETE",
     "请输入 DELETE 以确认删除。"
   );
 
-  const timestamp = currentTimestamp();
-  await execute(
-    `
-      update investments
-      set is_deleted = true, deleted_at = $1, updated_at = $1
-      where id = $2 and user_id = $3
-    `,
-    [timestamp, id, normalizedUserId]
-  );
+  return withTransaction(async (client) => {
+    const { row: existing, timeZone } = await fetchInvestmentContextWithClient(
+      client,
+      id,
+      normalizedUserId
+    );
+    assert(existing, "记录不存在。", 404);
+    assert(
+      existing.allocationNote !== CNY_CASH_YIELD_MARKER,
+      "该仓位由人民币现金资产自动同步，请前往资产页管理。",
+      409
+    );
 
-  return true;
+    const timestamp = currentTimestamp();
+    await client.query(
+      `
+        update investments
+        set is_deleted = true, deleted_at = $1, updated_at = $1
+        where id = $2 and user_id = $3
+      `,
+      [timestamp, id, normalizedUserId]
+    );
+
+    return buildDashboardSnapshotWithClient(client, normalizedUserId, {
+      timeZone,
+      removedId: id
+    });
+  });
 }
 
 export async function clearAllInvestments(userId) {
-  await execute(`delete from investments where user_id = $1`, [normalizeUserId(userId)]);
-  return getDashboardSnapshot(userId);
+  const normalizedUserId = normalizeUserId(userId);
+
+  return withTransaction(async (client) => {
+    await client.query(`delete from investments where user_id = $1`, [normalizedUserId]);
+    return buildDashboardSnapshotWithClient(client, normalizedUserId);
+  });
 }

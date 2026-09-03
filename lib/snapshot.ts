@@ -30,7 +30,8 @@ export function normalizeInvestmentRecord(record, referenceDate = new Date(), ti
     remark: record.remark ?? "",
     isDeleted: Boolean(record.isDeleted ?? record.is_deleted ?? false),
     createdAt: record.createdAt ?? record.created_at ?? new Date().toISOString(),
-    updatedAt: record.updatedAt ?? record.updated_at ?? new Date().toISOString()
+    updatedAt: record.updatedAt ?? record.updated_at ?? new Date().toISOString(),
+    managedBy: record.managedBy ?? null
   };
 
   return {

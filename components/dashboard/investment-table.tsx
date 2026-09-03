@@ -378,6 +378,11 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
           {investment.remark}
         </span>
       ) : null}
+      {investment.managedBy === 'assets' ? (
+        <span className="text-xs text-primary">
+          {t('table.syncedFromAssets')}
+        </span>
+      ) : null}
       {options?.showTimelineInline && isHistoricalInvestment(investment.status) ? (
         <span className="text-xs text-muted-foreground xl:hidden">
           {formatDate(investment.startDate)} {'->'} {formatDate(investment.endDate)}
@@ -405,29 +410,45 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
     ) : (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          aria-label={t('common.actions')}
+        >
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => onEdit(investment)}>
-          <Pencil className="mr-2 h-4 w-4" />
-          {t('common.edit')}
-        </DropdownMenuItem>
-        {investment.status === 'active' && (
-          <DropdownMenuItem onClick={() => setEndDialog(buildEndDialogState(investment))}>
-            <StopCircle className="mr-2 h-4 w-4" />
-            {t('table.endInvestmentEarly')}
+        {investment.managedBy === 'assets' ? (
+          <DropdownMenuItem asChild>
+            <Link href="/assets">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              {t('table.manageInAssets')}
+            </Link>
           </DropdownMenuItem>
+        ) : (
+          <>
+            <DropdownMenuItem onClick={() => onEdit(investment)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              {t('common.edit')}
+            </DropdownMenuItem>
+            {investment.status === 'active' && (
+              <DropdownMenuItem onClick={() => setEndDialog(buildEndDialogState(investment))}>
+                <StopCircle className="mr-2 h-4 w-4" />
+                {t('table.endInvestmentEarly')}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => setDeleteDialog(investment)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t('common.delete')}
+            </DropdownMenuItem>
+          </>
         )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => setDeleteDialog(investment)}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          {t('common.delete')}
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
     )

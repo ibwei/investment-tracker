@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSameOriginSession } from "@/lib/auth";
 import {
-  getDashboardSnapshotWithRecord,
-  getDashboardSnapshotWithoutRecord,
   softDeleteInvestment,
   updateInvestment
 } from "@/lib/investments";
@@ -35,11 +33,7 @@ export async function PATCH(request, context) {
     const session = await requireSameOriginSession(request);
     const id = parseId((await context.params).id);
     const body = await request.json();
-    const record = await updateInvestment(session.userId, id, body);
-    return NextResponse.json({
-      record,
-      snapshot: await getDashboardSnapshotWithRecord(session.userId, record)
-    });
+    return NextResponse.json(await updateInvestment(session.userId, id, body));
   } catch (error) {
     return handleRouteError(error);
   }
@@ -50,10 +44,9 @@ export async function DELETE(request, context) {
     const session = await requireSameOriginSession(request);
     const id = parseId((await context.params).id);
     const body = await request.json();
-    await softDeleteInvestment(session.userId, id, body?.confirmationText);
     return NextResponse.json({
       success: true,
-      snapshot: await getDashboardSnapshotWithoutRecord(session.userId, id)
+      snapshot: await softDeleteInvestment(session.userId, id, body?.confirmationText)
     });
   } catch (error) {
     return handleRouteError(error);

@@ -41,6 +41,8 @@ const DEFAULT_FILTERS: FilterOptions = {
   search: '',
 }
 
+let latestInitializationRequest = 0
+
 function normalizeType(type: string): InvestmentType {
   return TYPE_MAP[String(type ?? '').trim().toLowerCase()] ?? 'cedefi'
 }
@@ -106,6 +108,7 @@ function mapSnapshot(snapshot: any): Investment[] {
     status: normalizeStatus(record.status),
     isDeleted: Boolean(record.isDeleted),
     createdAt: record.createdAt ?? new Date().toISOString(),
+    managedBy: record.managedBy === 'assets' ? 'assets' : null,
   }))
 }
 
@@ -169,6 +172,8 @@ export const useInvestmentStore = create<InvestmentStore>()(
       hasInitialized: false,
 
       initialize: async (options = {}) => {
+        const requestId = ++latestInitializationRequest
+
         if (options.preview) {
           set({
             investments: previewInvestments,
@@ -183,6 +188,9 @@ export const useInvestmentStore = create<InvestmentStore>()(
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().getSnapshot()
+          if (requestId !== latestInitializationRequest) {
+            return
+          }
           set({
             investments: mapSnapshot(snapshot),
             isPreviewMode: false,
@@ -190,6 +198,9 @@ export const useInvestmentStore = create<InvestmentStore>()(
             hasInitialized: true,
           })
         } catch (error: any) {
+          if (requestId !== latestInitializationRequest) {
+            return
+          }
           set({
             isPreviewMode: false,
             isLoading: false,
@@ -204,6 +215,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
           return
         }
 
+        latestInitializationRequest += 1
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().create(mapFormToPayload(data))
@@ -247,6 +259,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
           expectedIncome: data.expectedIncome,
         }
 
+        latestInitializationRequest += 1
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().update(
@@ -268,6 +281,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
           return
         }
 
+        latestInitializationRequest += 1
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().remove(id, 'DELETE')
@@ -295,6 +309,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
           return
         }
 
+        latestInitializationRequest += 1
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().earlyClose(id, {
@@ -325,6 +340,7 @@ export const useInvestmentStore = create<InvestmentStore>()(
           return
         }
 
+        latestInitializationRequest += 1
         set({ isLoading: true, errorMessage: '' })
         try {
           const snapshot = await getRepository().clearAll()
