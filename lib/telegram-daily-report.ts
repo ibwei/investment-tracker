@@ -6,6 +6,7 @@ import {
   markClaimedScheduledJobSending
 } from "@/lib/snapshot-history";
 import { isTelegramReminderConfigured, sendTelegramMessage } from "@/lib/telegram";
+import { getUsdExchangeRate } from "@/lib/exchange-rate";
 import { toAppDateKey } from "@/lib/time";
 import { getUserByEmail } from "@/lib/users";
 
@@ -35,6 +36,15 @@ function formatUsd(value: number) {
   }).format(value);
 }
 
+function formatCny(value: number) {
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
 function totalsMatch(left: number, right: number) {
   if (!Number.isFinite(left) || !Number.isFinite(right)) {
     return false;
@@ -47,6 +57,8 @@ export function buildTelegramDailyReportText({
   estimatedIncomeUsd,
   incomeUnavailableReason,
   assetTotalUsd,
+  assetTotalCny,
+  usdToCnyRate,
   hasAssetSyncIssues
 }: {
   estimatedIncomeUsd: number | null;
@@ -56,6 +68,8 @@ export function buildTelegramDailyReportText({
     | "INCOMPLETE_SNAPSHOT"
     | null;
   assetTotalUsd: number;
+  assetTotalCny: number | null;
+  usdToCnyRate: number | null;
   hasAssetSyncIssues: boolean;
 }) {
   const incomeText = incomeUnavailableReason === "UNSUPPORTED_CURRENCY"
@@ -66,10 +80,14 @@ export function buildTelegramDailyReportText({
         ? "暂无昨日数据"
         : formatUsd(estimatedIncomeUsd);
   const assetIssueSuffix = hasAssetSyncIssues ? "（部分来源未刷新）" : "";
+  const cnyAssetText = assetTotalCny === null || usdToCnyRate === null
+    ? "汇率暂不可用"
+    : `${formatCny(assetTotalCny)}（USD/CNY ${usdToCnyRate.toFixed(4)}）`;
 
   return [
     `昨日预计理财收入：${incomeText}`,
-    `资产合计：${formatUsd(assetTotalUsd)}${assetIssueSuffix}`
+    `资产合计（美元）：${formatUsd(assetTotalUsd)}${assetIssueSuffix}`,
+    `资产合计（人民币折算）：${cnyAssetText}${assetIssueSuffix}`
   ].join("\n");
 }
 
@@ -110,9 +128,10 @@ export async function sendConfiguredTelegramDailyReport(referenceDate = new Date
   let deliveryStarted = false;
 
   try {
-    const [assetSyncResult, incomeSnapshot] = await Promise.all([
+    const [assetSyncResult, incomeSnapshot, usdToCnyExchangeRate] = await Promise.all([
       syncAllAssetSources(user.id),
-      getDailyIncomeSnapshot(user.id, yesterdayDate)
+      getDailyIncomeSnapshot(user.id, yesterdayDate),
+      getUsdExchangeRate("CNY").catch(() => null)
     ]);
     const hasIncompleteIncomeSnapshot = Boolean(
       incomeSnapshot && (
@@ -141,6 +160,10 @@ export async function sendConfiguredTelegramDailyReport(referenceDate = new Date
     if (!Number.isFinite(assetTotalUsd)) {
       throw createReportError("Asset total is unavailable.");
     }
+    const usdToCnyRate = usdToCnyExchangeRate?.rate ?? null;
+    const assetTotalCny = usdToCnyRate === null
+      ? null
+      : assetTotalUsd * usdToCnyRate;
     if (!isTelegramReminderConfigured()) {
       throw createReportError("Telegram bot configuration is unavailable.");
     }
@@ -160,6 +183,8 @@ export async function sendConfiguredTelegramDailyReport(referenceDate = new Date
         estimatedIncomeUsd,
         incomeUnavailableReason,
         assetTotalUsd,
+        assetTotalCny,
+        usdToCnyRate,
         hasAssetSyncIssues: assetSyncResult.summary.summary.failedSourceCount > 0
       })
     });
