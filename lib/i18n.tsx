@@ -135,7 +135,6 @@ const translations = {
       lp: 'LP',
       lending: 'Lending',
       cedefi: 'CeDeFi',
-      cash: 'Cash Yield',
     },
     statuses: {
       active: 'Active',
@@ -184,8 +183,6 @@ const translations = {
       endFailed: 'Failed to end the investment.',
       projectedDailyIncome: 'Final daily income: {amount}',
       saveFinishChanges: 'Save Finish Details',
-      syncedFromAssets: 'Automatically synced from Assets',
-      manageInAssets: 'Manage in Assets',
     },
     form: {
       addTitle: 'Add New Investment',
@@ -656,7 +653,6 @@ const translations = {
       lp: 'LP',
       lending: '借贷',
       cedefi: 'CeDeFi',
-      cash: '现金收益',
     },
     statuses: {
       active: '进行中',
@@ -702,8 +698,6 @@ const translations = {
       endFailed: '结束投资失败。',
       projectedDailyIncome: '最终日收益：{amount}',
       saveFinishChanges: '保存结束信息',
-      syncedFromAssets: '由资产页自动同步',
-      manageInAssets: '前往资产页管理',
     },
     form: {
       addTitle: '新增投资',

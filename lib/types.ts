@@ -1,4 +1,4 @@
-export type InvestmentType = 'interest' | 'lp' | 'lending' | 'cedefi' | 'cash'
+export type InvestmentType = 'interest' | 'lp' | 'lending' | 'cedefi'
 
 export type InvestmentStatus = 'active' | 'ended' | 'early_ended' | 'deleted'
 
@@ -25,7 +25,6 @@ export interface Investment {
   status: InvestmentStatus
   isDeleted: boolean
   createdAt: string
-  managedBy?: 'assets' | null
 }
 
 export interface InvestmentFormData {

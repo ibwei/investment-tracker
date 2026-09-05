@@ -23,7 +23,6 @@ const TYPE_MAP: Record<string, InvestmentType> = {
   lp: 'lp',
   lending: 'lending',
   cedefi: 'cedefi',
-  cash: 'cash',
 }
 
 const STATUS_MAP: Record<string, InvestmentStatus> = {
@@ -59,8 +58,6 @@ function mapTypeToRepository(type: InvestmentType): string {
       return 'LP'
     case 'lending':
       return 'Lending'
-    case 'cash':
-      return 'Cash'
     default:
       return 'CeDeFi'
   }
@@ -108,7 +105,6 @@ function mapSnapshot(snapshot: any): Investment[] {
     status: normalizeStatus(record.status),
     isDeleted: Boolean(record.isDeleted),
     createdAt: record.createdAt ?? new Date().toISOString(),
-    managedBy: record.managedBy === 'assets' ? 'assets' : null,
   }))
 }
 

@@ -4,7 +4,7 @@ import {
   toInputDateTimeValue
 } from "@/lib/time";
 
-export const INVESTMENT_TYPES = ["Interest", "LP", "Lending", "CeDeFi", "Cash"];
+export const INVESTMENT_TYPES = ["Interest", "LP", "Lending", "CeDeFi"];
 
 export const INVESTMENT_STATUSES = [
   "ONGOING",
