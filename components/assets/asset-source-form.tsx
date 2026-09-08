@@ -1,5 +1,6 @@
 "use client";
 
+import { OperationStatus } from "@/components/ui/operation-status";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,8 +100,8 @@ export function AssetSourceForm({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={(next) => { if (!isSubmitting) onOpenChange(next); }}>
+      <DialogContent showCloseButton={!isSubmitting}>
         <DialogHeader>
           <DialogTitle>
             {source ? t("assets.forms.editSourceTitle") : t("assets.forms.addSourceTitle")}
@@ -245,8 +246,9 @@ export function AssetSourceForm({
             </div>
           )}
 
+          <OperationStatus pending={isSubmitting} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => onOpenChange(false)}>
               {t("assets.forms.cancel")}
             </Button>
             <Button type="submit" loading={isSubmitting}>

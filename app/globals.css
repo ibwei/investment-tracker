@@ -239,3 +239,5 @@
 .earn-date-time-popup .ant-picker-time-panel-column-count > li::before {
   border-color: rgba(255, 255, 255, 0.08) !important;
 }
+
+tr[data-changed="true"] { background-color: color-mix(in srgb, var(--primary) 12%, transparent); transition: background-color 200ms; }

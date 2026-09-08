@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSameOriginSession } from "@/lib/auth";
 import {
@@ -27,13 +28,13 @@ function parseId(rawId) {
   return id;
 }
 
-export async function POST(request, context) {
+export const POST = timedRoute(async function (request, context) {
   try {
     const session = await requireSameOriginSession(request);
     const id = parseId((await context.params).id);
     const body = await request.json();
-    return NextResponse.json(await finishInvestment(session.userId, id, body));
+    return NextResponse.json(await finishInvestment(session.userId, id, body, { compact: new URL(request.url).searchParams.get("response") === "delta" }));
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

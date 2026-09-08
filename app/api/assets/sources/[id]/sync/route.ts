@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSameOriginSession } from "@/lib/auth";
 import { syncAssetSource } from "@/lib/assets/service";
@@ -12,7 +13,7 @@ function handleRouteError(error: any) {
   );
 }
 
-export async function POST(
+export const POST = timedRoute(async function (
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
@@ -23,4 +24,4 @@ export async function POST(
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

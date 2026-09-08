@@ -37,7 +37,7 @@ export function AssetAllocationChart({
       <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="relative h-[260px] min-h-0 min-w-0">
           {items.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 260 }}>
               <PieChart>
                 <Pie
                   data={items}

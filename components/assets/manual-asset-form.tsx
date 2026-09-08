@@ -1,5 +1,6 @@
 "use client";
 
+import { OperationStatus } from "@/components/ui/operation-status";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,8 +82,8 @@ export function ManualAssetForm({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={(next) => { if (!isSubmitting) onOpenChange(next); }}>
+      <DialogContent showCloseButton={!isSubmitting}>
         <DialogHeader>
           <DialogTitle>
             {asset ? t("assets.forms.editManualTitle") : t("assets.forms.addManualTitle")}
@@ -157,8 +158,9 @@ export function ManualAssetForm({
               placeholder={t("assets.forms.notePlaceholder")}
             />
           </div>
+          <OperationStatus pending={isSubmitting} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => onOpenChange(false)}>
               {t("assets.forms.cancel")}
             </Button>
             <Button type="submit" loading={isSubmitting}>

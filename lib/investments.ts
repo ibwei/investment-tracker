@@ -1,3 +1,4 @@
+import { measure } from "@/lib/performance";
 import {
   INVESTMENT_STATUSES,
   isBlank,
@@ -5,7 +6,7 @@ import {
   toNullableNumber
 } from "@/lib/calculations";
 import { execute, query, withConnection, withTransaction } from "@/lib/db";
-import { buildDashboardSnapshot } from "@/lib/snapshot";
+import { buildDashboardSnapshot, normalizeInvestmentRecord } from "@/lib/snapshot";
 import { resolveAppTimeZone, toUtcISOString } from "@/lib/time";
 
 function assert(condition, message, status = 400) {
@@ -245,12 +246,12 @@ async function buildDashboardSnapshotWithClient(
     records = records.filter((item) => String(item.id) !== String(removedId));
   }
 
-  return buildDashboardSnapshot(records, new Date(), resolvedTimeZone);
+  return measure("calculation", async () => buildDashboardSnapshot(records, new Date(), resolvedTimeZone));
 }
 
-export async function getDashboardSnapshot(userId) {
+export async function getDashboardSnapshot(userId, options: { compact?: boolean } = {}) {
   return withConnection(async (client) =>
-    buildDashboardSnapshotWithClient(client, userId)
+    buildDashboardSnapshotWithClient(client, userId).then((snapshot) => options.compact ? { records: snapshot.records, meta: snapshot.meta } : snapshot)
   );
 }
 
@@ -293,7 +294,14 @@ export async function autoSettleMaturedInvestments(referenceDate = new Date()) {
   };
 }
 
-export async function createInvestment(userId, input) {
+async function buildMutationResponse(client, userId, record, timeZone, compact: boolean) {
+  if (compact) {
+    return { record: await measure("calculation", async () => normalizeInvestmentRecord(record, new Date(), timeZone)) };
+  }
+  return { record, snapshot: await buildDashboardSnapshotWithClient(client, userId, { timeZone, record }) };
+}
+
+export async function createInvestment(userId, input, options: { compact?: boolean } = {}) {
   const normalizedUserId = normalizeUserId(userId);
 
   return withTransaction(async (client) => {
@@ -339,17 +347,11 @@ export async function createInvestment(userId, input) {
     );
     const record = mapRecord(result.rows[0]);
 
-    return {
-      record,
-      snapshot: await buildDashboardSnapshotWithClient(client, normalizedUserId, {
-        timeZone,
-        record
-      })
-    };
+    return buildMutationResponse(client, normalizedUserId, record, timeZone, options.compact);
   });
 }
 
-export async function updateInvestment(userId, id, input) {
+export async function updateInvestment(userId, id, input, options: { compact?: boolean } = {}) {
   const normalizedUserId = normalizeUserId(userId);
 
   return withTransaction(async (client) => {
@@ -414,17 +416,11 @@ export async function updateInvestment(userId, id, input) {
     );
     const record = mapRecord(result.rows[0]);
 
-    return {
-      record,
-      snapshot: await buildDashboardSnapshotWithClient(client, normalizedUserId, {
-        timeZone,
-        record
-      })
-    };
+    return buildMutationResponse(client, normalizedUserId, record, timeZone, options.compact);
   });
 }
 
-export async function finishInvestment(userId, id, input) {
+export async function finishInvestment(userId, id, input, options: { compact?: boolean } = {}) {
   const normalizedUserId = normalizeUserId(userId);
 
   return withTransaction(async (client) => {
@@ -468,17 +464,11 @@ export async function finishInvestment(userId, id, input) {
     );
     const record = mapRecord(result.rows[0]);
 
-    return {
-      record,
-      snapshot: await buildDashboardSnapshotWithClient(client, normalizedUserId, {
-        timeZone,
-        record
-      })
-    };
+    return buildMutationResponse(client, normalizedUserId, record, timeZone, options.compact);
   });
 }
 
-export async function softDeleteInvestment(userId, id, confirmationText) {
+export async function softDeleteInvestment(userId, id, confirmationText, options: { compact?: boolean } = {}) {
   const normalizedUserId = normalizeUserId(userId);
   assert(
     normalizeText(confirmationText).toUpperCase() === "DELETE",
@@ -502,18 +492,17 @@ export async function softDeleteInvestment(userId, id, confirmationText) {
       [timestamp, id, normalizedUserId]
     );
 
-    return buildDashboardSnapshotWithClient(client, normalizedUserId, {
-      timeZone,
-      removedId: id
-    });
+    if (options.compact) return { removedId: id };
+    return buildDashboardSnapshotWithClient(client, normalizedUserId, { timeZone, removedId: id });
   });
 }
 
-export async function clearAllInvestments(userId) {
+export async function clearAllInvestments(userId, options: { compact?: boolean } = {}) {
   const normalizedUserId = normalizeUserId(userId);
 
   return withTransaction(async (client) => {
     await client.query(`delete from investments where user_id = $1`, [normalizedUserId]);
+    if (options.compact) return { cleared: true };
     return buildDashboardSnapshotWithClient(client, normalizedUserId);
   });
 }

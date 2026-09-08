@@ -6,6 +6,8 @@ import { persist } from 'zustand/middleware'
 import { getInvestmentRepository } from '@/lib/storage/repositories'
 import { STORAGE_MODES } from '@/lib/storage-mode'
 import { useAppStore } from '@/store/app-store'
+import { FRESHNESS_MS, RequestError } from '@/lib/client-request'
+import { remoteInvestmentRepository } from '@/lib/storage/repositories/remote-investment-repository'
 import { previewInvestments } from '@/lib/preview-data'
 import type {
   EndInvestmentData,
@@ -41,6 +43,70 @@ const DEFAULT_FILTERS: FilterOptions = {
 }
 
 let latestInitializationRequest = 0
+let readController: AbortController | undefined
+let readPromise: Promise<void> | undefined
+let reconciliationNeeded = false
+let refreshTimer: ReturnType<typeof setTimeout> | undefined
+const mutationControllers = new Map<string, AbortController>()
+
+function cancelRequests() {
+  latestInitializationRequest += 1
+  readController?.abort()
+  readPromise = undefined
+  clearTimeout(refreshTimer)
+  mutationControllers.forEach(controller => controller.abort())
+  mutationControllers.clear()
+  reconciliationNeeded = false
+}
+
+async function runMutation(set: any, get: () => InvestmentStore, key: string, task: (repository: any, options: any) => Promise<any>) {
+  const state = get()
+  if (state.isPreviewMode || state.scope === 'guest') throw new Error('preview.readOnlyHint')
+  if (state.pendingIds.includes(key) || state.pendingIds.includes('*') || (key === '*' && state.pendingIds.length)) throw new Error('request.pending')
+  if (state.uncertainIds.includes(key) || state.uncertainIds.includes('*') || (key === '*' && state.uncertainIds.length)) throw new Error('request.uncertain')
+  const scope = state.scope
+  const controller = new AbortController()
+  mutationControllers.set(key, controller)
+  latestInitializationRequest += 1
+  readController?.abort()
+  readPromise = undefined
+  clearTimeout(refreshTimer)
+  set({ pendingIds: [...state.pendingIds, key], errorMessage: '', refreshError: '', isLoading: false })
+  let shouldRefresh = false
+  try {
+    const repository = getRepository()
+    const response = await task(repository, { compact: repository === remoteInvestmentRepository, signal: controller.signal })
+    if (get().scope !== scope || controller.signal.aborted) throw new Error('request.sessionChanged')
+    shouldRefresh = true
+    set((current: InvestmentStore) => {
+      let investments = current.investments
+      if (response.cleared) investments = []
+      else if (response.removedId != null) investments = investments.filter(item => item.id !== String(response.removedId))
+      else if (response.record) {
+        const [record] = mapSnapshot({ records: [response.record] })
+        investments = current.investments.some(item => item.id === record.id)
+          ? current.investments.map(item => item.id === record.id ? record : item)
+          : [record, ...current.investments]
+      } else investments = mapSnapshot(response)
+      return { investments, hasInitialized: true, updatedAt: Date.now(), changedId: response.record ? String(response.record.id) : null, changedAt: Date.now(), ...(key === 'create' ? { filters: DEFAULT_FILTERS } : {}) }
+    })
+  } catch (error) {
+    if (get().scope !== scope || controller.signal.aborted) throw new Error('request.sessionChanged')
+    if (get().scope === scope && !controller.signal.aborted) {
+      const uncertain = error instanceof RequestError && error.uncertain
+      shouldRefresh = uncertain
+      set({ errorMessage: uncertain ? 'request.uncertain' : (error as Error).message, uncertainIds: uncertain ? [...get().uncertainIds, key] : get().uncertainIds })
+    }
+    throw error
+  } finally {
+    if (mutationControllers.get(key) === controller) mutationControllers.delete(key)
+    if (get().scope === scope && !controller.signal.aborted) {
+      set({ pendingIds: get().pendingIds.filter(id => id !== key) })
+      reconciliationNeeded = reconciliationNeeded || shouldRefresh
+      if (reconciliationNeeded && !get().pendingIds.length) refreshTimer = setTimeout(() => { reconciliationNeeded = false; void get().initialize({ force: true }) }, 150)
+    }
+  }
+}
 
 function normalizeType(type: string): InvestmentType {
   return TYPE_MAP[String(type ?? '').trim().toLowerCase()] ?? 'cedefi'
@@ -141,7 +207,16 @@ interface InvestmentStore {
   isLoading: boolean
   errorMessage: string
   hasInitialized: boolean
-  initialize: (options?: { preview?: boolean }) => Promise<void>
+  scope: string
+  updatedAt: number
+  pendingIds: string[]
+  uncertainIds: string[]
+  refreshError: string
+  changedId: string | null
+  changedAt: number
+  resetScope: (scope: string) => void
+  hydrate: (scope: string, snapshot: any, startedAt: number) => void
+  initialize: (options?: { preview?: boolean; userId?: number; force?: boolean }) => Promise<void>
   addInvestment: (data: InvestmentFormData) => Promise<void>
   updateInvestment: (id: string, data: Partial<InvestmentFormData>) => Promise<void>
   deleteInvestment: (id: string) => Promise<void>
@@ -167,188 +242,79 @@ export const useInvestmentStore = create<InvestmentStore>()(
       errorMessage: '',
       hasInitialized: false,
 
+      scope: 'guest',
+      updatedAt: 0,
+      pendingIds: [],
+      uncertainIds: [],
+      refreshError: '',
+      changedId: null,
+      changedAt: 0,
+
+      resetScope: (scope) => {
+        if (get().scope === scope) return
+        cancelRequests()
+        set({ scope, investments: [], hasInitialized: false, isPreviewMode: scope === 'guest', isLoading: false, updatedAt: 0, errorMessage: '', refreshError: '', pendingIds: [], uncertainIds: [], changedId: null })
+      },
+      hydrate: (scope, snapshot, startedAt) => {
+        get().resetScope(scope)
+        if (get().updatedAt > startedAt || get().pendingIds.length || get().hasInitialized) return
+        latestInitializationRequest += 1
+        readController?.abort()
+        readPromise = undefined
+        set({ investments: mapSnapshot(snapshot), hasInitialized: true, updatedAt: Date.now(), isLoading: false, isPreviewMode: false, errorMessage: '' })
+      },
       initialize: async (options = {}) => {
+        const scope = options.preview ? 'guest' : options.userId ? `user:${options.userId}` : get().scope
+        get().resetScope(scope)
+        if (scope === 'guest') {
+          set({ investments: previewInvestments, isPreviewMode: true, isLoading: false, errorMessage: '', hasInitialized: true })
+          return
+        }
+        if (get().pendingIds.length) return
+        if (readPromise) return readPromise
+        if (!options.force && get().hasInitialized && Date.now() - get().updatedAt < FRESHNESS_MS) return
         const requestId = ++latestInitializationRequest
-
-        if (options.preview) {
-          set({
-            investments: previewInvestments,
-            isPreviewMode: true,
-            isLoading: false,
-            errorMessage: '',
-            hasInitialized: true,
-          })
-          return
-        }
-
-        set({ isLoading: true, errorMessage: '' })
-        try {
-          const snapshot = await getRepository().getSnapshot()
-          if (requestId !== latestInitializationRequest) {
-            return
+        const controller = new AbortController()
+        readController = controller
+        set({ isLoading: true, errorMessage: '', refreshError: '' })
+        const promise = (async () => {
+          try {
+            const repository = getRepository()
+            const snapshot = await (repository === remoteInvestmentRepository
+              ? repository.getSnapshot({ compact: true, signal: controller.signal })
+              : repository.getSnapshot())
+            if (controller.signal.aborted || requestId !== latestInitializationRequest || scope !== get().scope) return
+            set({ investments: mapSnapshot(snapshot), isPreviewMode: false, isLoading: false, hasInitialized: true, updatedAt: Date.now(), refreshError: '' })
+          } catch (error: any) {
+            if (controller.signal.aborted || requestId !== latestInitializationRequest || scope !== get().scope) return
+            set({ isLoading: false, ...(get().hasInitialized ? { refreshError: 'request.refreshFailed' } : { errorMessage: error?.message ?? 'request.failed' }) })
+          } finally {
+            if (requestId === latestInitializationRequest) readPromise = undefined
           }
-          set({
-            investments: mapSnapshot(snapshot),
-            isPreviewMode: false,
-            isLoading: false,
-            hasInitialized: true,
-          })
-        } catch (error: any) {
-          if (requestId !== latestInitializationRequest) {
-            return
-          }
-          set({
-            isPreviewMode: false,
-            isLoading: false,
-            hasInitialized: true,
-            errorMessage: error?.message ?? 'Failed to load investments.',
-          })
-        }
+        })()
+        readPromise = promise
+        return promise
       },
-
-      addInvestment: async (data) => {
-        if (get().isPreviewMode) {
-          return
-        }
-
-        latestInitializationRequest += 1
-        set({ isLoading: true, errorMessage: '' })
-        try {
-          const snapshot = await getRepository().create(mapFormToPayload(data))
-          set({
-            investments: mapSnapshot(snapshot),
-            filters: DEFAULT_FILTERS,
-            isLoading: false,
-          })
-        } catch (error: any) {
-          set({
-            isLoading: false,
-            errorMessage: error?.message ?? 'Failed to create investment.',
-          })
-          throw error
-        }
-      },
-
-      updateInvestment: async (id, data) => {
-        if (get().isPreviewMode) {
-          return
-        }
-
-        const current = get().investments.find((investment) => investment.id === id)
-        if (!current) {
-          return
-        }
-
-        const nextData: InvestmentFormData = {
-          project: data.project ?? current.project,
-          name: data.name ?? current.name,
-          url: data.url ?? current.url,
-          type: data.type ?? current.type,
-          amount: data.amount ?? current.amount,
-          currency: data.currency ?? current.currency,
-          description: data.description ?? current.description,
-          startDate: data.startDate ?? current.startDate,
-          endDate: data.endDate ?? current.endDate,
+      addInvestment: (data) => runMutation(set, get, 'create', (repository, options) => repository.create(mapFormToPayload(data), options)),
+      updateInvestment: (id, data) => runMutation(set, get, id, (repository, options) => {
+        const current = get().investments.find(item => item.id === id)
+        if (!current) throw new Error('Record not found.')
+        const nextData = { ...current, ...Object.fromEntries(Object.entries(data).filter(([, value]) => value != null)), expectedIncome: data.expectedIncome } as InvestmentFormData
+        return repository.update(id, mapFormToPayload(nextData, current.status), options)
+      }),
+      deleteInvestment: (id) => runMutation(set, get, id, (repository, options) => repository.remove(id, 'DELETE', options)),
+      restoreInvestment: async () => { await get().initialize({ force: true }) },
+      endInvestment: (id, data) => runMutation(set, get, id, (repository, options) => {
+        const current = get().investments.find(item => item.id === id)
+        if (!current) throw new Error('Record not found.')
+        return repository.earlyClose(id, {
+          status: mapStatusToRepository('early_ended'), endTime: data.endDate,
+          incomeTotal: data.totalIncome ?? current.totalIncome,
+          aprActual: data.actualApr ?? current.actualApr,
           remark: data.remark ?? current.remark,
-          expectedApr: data.expectedApr ?? current.expectedApr,
-          actualApr: data.actualApr ?? current.actualApr,
-          expectedIncome: data.expectedIncome,
-        }
-
-        latestInitializationRequest += 1
-        set({ isLoading: true, errorMessage: '' })
-        try {
-          const snapshot = await getRepository().update(
-            id,
-            mapFormToPayload(nextData, current.status),
-          )
-          set({ investments: mapSnapshot(snapshot), isLoading: false })
-        } catch (error: any) {
-          set({
-            isLoading: false,
-            errorMessage: error?.message ?? 'Failed to update investment.',
-          })
-          throw error
-        }
-      },
-
-      deleteInvestment: async (id) => {
-        if (get().isPreviewMode) {
-          return
-        }
-
-        latestInitializationRequest += 1
-        set({ isLoading: true, errorMessage: '' })
-        try {
-          const snapshot = await getRepository().remove(id, 'DELETE')
-          set({ investments: mapSnapshot(snapshot), isLoading: false })
-        } catch (error: any) {
-          set({
-            isLoading: false,
-            errorMessage: error?.message ?? 'Failed to delete investment.',
-          })
-          throw error
-        }
-      },
-
-      restoreInvestment: async () => {
-        await get().initialize({ preview: get().isPreviewMode })
-      },
-
-      endInvestment: async (id, data) => {
-        if (get().isPreviewMode) {
-          return
-        }
-
-        const current = get().investments.find((investment) => investment.id === id)
-        if (!current) {
-          return
-        }
-
-        latestInitializationRequest += 1
-        set({ isLoading: true, errorMessage: '' })
-        try {
-          const snapshot = await getRepository().earlyClose(id, {
-            status: mapStatusToRepository('early_ended'),
-            endTime: data.endDate,
-            incomeTotal: data.totalIncome ?? current.totalIncome,
-            aprActual: data.actualApr ?? current.actualApr,
-            remark: data.remark ?? current.remark,
-          })
-          set({ investments: mapSnapshot(snapshot), isLoading: false })
-        } catch (error: any) {
-          set({
-            isLoading: false,
-            errorMessage: error?.message ?? 'Failed to end investment.',
-          })
-          throw error
-        }
-      },
-
-      clearAllData: async () => {
-        if (get().isPreviewMode) {
-          set({
-            investments: previewInvestments,
-            isPreviewMode: true,
-            isLoading: false,
-            errorMessage: '',
-          })
-          return
-        }
-
-        latestInitializationRequest += 1
-        set({ isLoading: true, errorMessage: '' })
-        try {
-          const snapshot = await getRepository().clearAll()
-          set({ investments: mapSnapshot(snapshot), isLoading: false })
-        } catch (error: any) {
-          set({
-            isLoading: false,
-            errorMessage: error?.message ?? 'Failed to clear data.',
-          })
-          throw error
-        }
-      },
+        }, options)
+      }),
+      clearAllData: () => runMutation(set, get, '*', (repository, options) => repository.clearAll(options)),
 
       setFilters: (filters) => {
         set((state) => ({

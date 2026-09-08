@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import dynamic from "next/dynamic";
+import { readResource, seedResource, peekResource, invalidateResources, requestJson, RequestError } from "@/lib/client-request";
+import { OperationStatus, LoadingPanel } from "@/components/ui/operation-status";
 import Link from "next/link";
 import { Loader2, Plus, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth-provider";
 import { AssetAllocationChart } from "@/components/assets/asset-allocation-chart";
 import { AssetBalanceTable } from "@/components/assets/asset-balance-table";
-import { AssetHealthPanel } from "@/components/assets/asset-health-panel";
-import { AssetSourceForm } from "@/components/assets/asset-source-form";
+const AssetHealthPanel = dynamic(() => import("@/components/assets/asset-health-panel").then(module => module.AssetHealthPanel), { loading: () => <div className="h-64 animate-pulse rounded-xl bg-muted" /> });
+const AssetSourceForm = dynamic(() => import("@/components/assets/asset-source-form").then(module => module.AssetSourceForm), { loading: () => <div className="h-64 animate-pulse rounded-xl bg-muted" /> });
 import { AssetSourceList } from "@/components/assets/asset-source-list";
 import { AssetSummaryCards } from "@/components/assets/asset-summary-cards";
-import { AssetTrendChart } from "@/components/assets/asset-trend-chart";
-import { ManualAssetForm } from "@/components/assets/manual-asset-form";
+const AssetTrendChart = dynamic(() => import("@/components/assets/asset-trend-chart").then(module => module.AssetTrendChart), { loading: () => <div className="h-64 animate-pulse rounded-xl bg-muted" /> });
+const ManualAssetForm = dynamic(() => import("@/components/assets/manual-asset-form").then(module => module.ManualAssetForm), { loading: () => <div className="h-64 animate-pulse rounded-xl bg-muted" /> });
 import { ManualAssetList } from "@/components/assets/manual-asset-list";
 import { TopAssetsList } from "@/components/assets/top-assets-list";
 import { Navbar } from "@/components/layout/navbar";
@@ -58,25 +61,21 @@ type AssetMutationResponse = {
   error?: string | null;
 };
 
-async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
-    cache: "no-store",
-    ...init,
-  });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Request failed.");
-  }
-
-  return payload as T;
-}
-
 export default function AssetsPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const scope = user?.id ? `user:${user.id}` : 'guest';
+  const alive = useRef(true);
+  const versions = useRef<Record<string, number>>({});
+  const actionLock = useRef(false);
+  const mutationController = useRef<AbortController | null>(null);
+  const activeTabRef = useRef<AssetTab>('overview');
+  const [tabErrors, setTabErrors] = useState<Record<string, string>>({});
+  const [tabLoading, setTabLoading] = useState<Record<string, boolean>>({});
+  const [updatedAt, setUpdatedAt] = useState(0);
+  const [uncertain, setUncertain] = useState(false);
   const { formatDisplayCurrency, t } = useI18n();
   const [activeTab, setActiveTab] = useState<AssetTab>("overview");
-  const [summary, setSummary] = useState<AssetSummaryResponse | null>(null);
+  const [summary, setSummary] = useState<AssetSummaryResponse | null>(() => peekResource<AssetSummaryResponse>(scope, "/api/assets/summary").data ?? null);
   const [sources, setSources] = useState<AssetSourceRecord[]>([]);
   const [manualAssets, setManualAssets] = useState<ManualAssetRecord[]>([]);
   const [balances, setBalances] = useState<AssetBalanceRecord[]>([]);
@@ -86,7 +85,7 @@ export default function AssetsPage() {
   const [loadedTabs, setLoadedTabs] = useState<Record<string, boolean>>({});
   const [trendRange, setTrendRange] = useState(30);
   const [isPageLoading, setIsPageLoading] = useState(true);
-  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const isDetailLoading = Boolean(tabLoading[activeTab]);
   const [sourceFormOpen, setSourceFormOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<AssetSourceRecord | null>(null);
   const [manualFormOpen, setManualFormOpen] = useState(false);
@@ -106,90 +105,94 @@ export default function AssetsPage() {
     { key: "health", label: t("assets.tabs.health") },
   ] as const;
 
-  async function loadSummary() {
-    if (!isAuthenticated) {
-      setSummary(previewAssetSummary);
-      return;
+  async function loadSummary(force = false) {
+    if (!isAuthenticated) { setSummary(previewAssetSummary); setIsPageLoading(false); return; }
+    const version = versions.current.overview = (versions.current.overview ?? 0) + 1;
+    setTabLoading(current => ({ ...current, overview: true }));
+    try {
+      const payload = await readResource<AssetSummaryResponse>(scope, '/api/assets/summary', force);
+      if (!alive.current || version !== versions.current.overview) return;
+      setSummary(payload);
+      setLoadedTabs(current => ({ ...current, overview: true }));
+      setUpdatedAt(peekResource(scope, '/api/assets/summary').updatedAt);
+      setTabErrors(current => ({ ...current, overview: '' }));
+    } catch (error) {
+      if (alive.current && version === versions.current.overview) setTabErrors(current => ({ ...current, overview: 'request.refreshFailed' }));
+    } finally {
+      if (alive.current && version === versions.current.overview) { setIsPageLoading(false); setTabLoading(current => ({ ...current, overview: false })); }
     }
-
-    const payload = await requestJson<AssetSummaryResponse>("/api/assets/summary");
-    setSummary(payload);
   }
 
   async function loadTabData(tab: AssetTab, force = false) {
+    if (tab === 'overview') return loadSummary(force);
     if (!isAuthenticated) {
-      if (tab === "trend") {
-        setSnapshots(previewAssetSnapshots);
-      }
-      if (tab === "sources") {
-        setSources(previewAssetSources);
-      }
-      if (tab === "manual") {
-        setManualAssets(previewManualAssets);
-      }
-      if (tab === "balances") {
-        setBalances(previewAssetBalances);
-        setPositions(previewAssetPositions);
-      }
-      if (tab === "health") {
-        setHealth({
-          failedSources: previewAssetSources.filter((item) => item.status === "FAILED"),
-          syncLogs: previewAssetSyncLogs,
-        });
-      }
-      setLoadedTabs((current) => ({ ...current, [tab]: true }));
+      if (tab === 'trend') setSnapshots(previewAssetSnapshots);
+      if (tab === 'sources') setSources(previewAssetSources);
+      if (tab === 'manual') setManualAssets(previewManualAssets);
+      if (tab === 'balances') { setBalances(previewAssetBalances); setPositions(previewAssetPositions); }
+      if (tab === 'health') setHealth({ failedSources: previewAssetSources.filter(item => item.status === 'FAILED'), syncLogs: previewAssetSyncLogs });
+      setLoadedTabs(current => ({ ...current, [tab]: true }));
       return;
     }
-
-    if (loadedTabs[tab] && !force) {
-      return;
-    }
-
-    setIsDetailLoading(true);
-
+    const version = versions.current[tab] = (versions.current[tab] ?? 0) + 1;
+    const isCurrent = () => alive.current && version === versions.current[tab];
+    setTabLoading(current => ({ ...current, [tab]: true }));
     try {
-      if (tab === "trend") {
-        const payload = await requestJson<{ snapshots: AssetSnapshotRecord[] }>(
-          `/api/assets/snapshots?days=${trendRange}`
-        );
-        setSnapshots(payload.snapshots);
+      if (tab === 'trend') {
+        const payload = await readResource<{ snapshots: AssetSnapshotRecord[] }>(scope, `/api/assets/snapshots?days=${trendRange}`, force);
+        if (isCurrent()) setSnapshots(payload.snapshots);
       }
-
-      if (tab === "sources") {
-        const payload = await requestJson<{ sources: AssetSourceRecord[] }>("/api/assets/sources");
-        setSources(payload.sources);
+      if (tab === 'sources') {
+        const payload = await readResource<{ sources: AssetSourceRecord[] }>(scope, '/api/assets/sources', force);
+        if (isCurrent()) setSources(payload.sources);
       }
-
-      if (tab === "manual") {
-        const payload = await requestJson<{ assets: ManualAssetRecord[] }>("/api/assets/manual");
-        setManualAssets(payload.assets);
+      if (tab === 'manual') {
+        const payload = await readResource<{ assets: ManualAssetRecord[] }>(scope, '/api/assets/manual', force);
+        if (isCurrent()) setManualAssets(payload.assets);
       }
-
-      if (tab === "balances") {
+      if (tab === 'balances') {
         const [balancePayload, positionPayload] = await Promise.all([
-          requestJson<{ balances: AssetBalanceRecord[] }>(
-            "/api/assets/balances?limit=20&offset=0&sort=valueUsd.desc"
-          ),
-          requestJson<{ positions: AssetPositionRecord[] }>(
-            "/api/assets/positions?limit=20&offset=0&sort=netValueUsd.desc"
-          ),
+          readResource<{ balances: AssetBalanceRecord[] }>(scope, '/api/assets/balances?limit=20&offset=0&sort=valueUsd.desc', force),
+          readResource<{ positions: AssetPositionRecord[] }>(scope, '/api/assets/positions?limit=20&offset=0&sort=netValueUsd.desc', force),
         ]);
-        setBalances(balancePayload.balances);
-        setPositions(positionPayload.positions);
+        if (isCurrent()) { setBalances(balancePayload.balances); setPositions(positionPayload.positions); }
       }
-
-      if (tab === "health") {
-        setHealth(await requestJson<HealthResponse>("/api/assets/health"));
+      if (tab === 'health') {
+        const payload = await readResource<HealthResponse>(scope, '/api/assets/health', force);
+        if (isCurrent()) setHealth(payload);
       }
-
-      setLoadedTabs((current) => ({ ...current, [tab]: true }));
+      if (isCurrent()) {
+        setLoadedTabs(current => ({ ...current, [tab]: true }));
+        setTabErrors(current => ({ ...current, [tab]: '' }));
+      }
+    } catch (error) {
+      if (isCurrent()) setTabErrors(current => ({ ...current, [tab]: 'request.refreshFailed' }));
     } finally {
-      setIsDetailLoading(false);
+      if (isCurrent()) setTabLoading(current => ({ ...current, [tab]: false }));
     }
+  }
+
+  async function requestMutation<T>(url: string, options: RequestInit): Promise<T> {
+    if (!isAuthenticated || actionLock.current || uncertain) throw new Error(uncertain ? 'request.uncertain' : 'request.pending');
+    actionLock.current = true;
+    mutationController.current = new AbortController();
+    for (const key of ['overview', 'trend', 'sources', 'manual', 'balances', 'health']) versions.current[key] = (versions.current[key] ?? 0) + 1;
+    invalidateResources(scope, '/api/assets');
+    setTabLoading({});
+    try {
+      const response = await requestJson<T>(url, { ...options, signal: mutationController.current.signal });
+      if (!alive.current) throw new Error('request.sessionChanged');
+      return response;
+    } catch (error) {
+      if (alive.current && error instanceof RequestError && error.uncertain) { setUncertain(true); void loadSummary(true); void loadTabData(activeTabRef.current, true); }
+      throw error;
+    } finally { actionLock.current = false; }
   }
 
   function applyAssetMutationResponse(response: AssetMutationResponse) {
     if (response.summary) {
+      setIsPageLoading(false);
+      setUpdatedAt(Date.now());
       setSummary(response.summary);
     }
 
@@ -224,63 +227,37 @@ export default function AssetsPage() {
     }
   }
 
-  async function refreshAllAssetData(fallbackSummary?: AssetSummaryResponse) {
-    if (fallbackSummary) {
-      setSummary(fallbackSummary);
-    }
-
-    try {
-      await loadSummary();
-    } catch (error) {
-      if (!fallbackSummary) {
-        throw error;
-      }
-    }
-
-    const tabsToRefresh: AssetTab[] = ["trend", "sources", "manual", "balances", "health"];
-    await Promise.all(tabsToRefresh.map((tab) => loadTabData(tab, true)));
+  function refreshVisibleAssetData(fallbackSummary?: AssetSummaryResponse) {
+    invalidateResources(scope, '/api/assets');
+    for (const key of ['overview', 'trend', 'sources', 'manual', 'balances', 'health']) versions.current[key] = (versions.current[key] ?? 0) + 1;
+    setTabLoading({});
+    setLoadedTabs(current => ({ ...current, overview: true }));
+    if (fallbackSummary) { setIsPageLoading(false); setSummary(fallbackSummary); seedResource(scope, "/api/assets/summary", fallbackSummary); setUpdatedAt(Date.now()); setTabErrors(current => ({ ...current, overview: "" })); }
+    else void loadSummary(true);
+    if (activeTabRef.current !== 'overview') void loadTabData(activeTabRef.current, true);
   }
 
   useEffect(() => {
-    let mounted = true;
-
-    async function bootstrap() {
-      setIsPageLoading(true);
-      try {
-        await loadSummary();
-        if (mounted) {
-          setLoadedTabs({ overview: true });
-        }
-      } catch (error: any) {
-        toast.error(error?.message ?? t("assets.toast.loadFailed"));
-      } finally {
-        if (mounted) {
-          setIsPageLoading(false);
-        }
-      }
-    }
-
-    void bootstrap();
-
-    return () => {
-      mounted = false;
-    };
-  }, [isAuthenticated]);
+    alive.current = true;
+    return () => { alive.current = false; mutationController.current?.abort(); };
+  }, []);
 
   useEffect(() => {
-    if (activeTab === "trend" && isAuthenticated && loadedTabs.trend) {
-      void loadTabData("trend", true);
-    }
-  }, [trendRange]);
-
-  useEffect(() => {
-    if (activeTab === "overview") {
-      void loadSummary();
-      return;
-    }
-
+    activeTabRef.current = activeTab;
+    if (actionLock.current) return;
     void loadTabData(activeTab);
-  }, [activeTab, isAuthenticated]);
+  }, [activeTab, trendRange, scope]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || actionLock.current) return;
+      void loadSummary();
+      if (activeTabRef.current !== 'overview') void loadTabData(activeTabRef.current);
+    };
+    window.addEventListener('online', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.removeEventListener('online', refresh); document.removeEventListener('visibilitychange', refresh); };
+  }, [scope, trendRange]);
 
   const topAssets = useMemo(() => summary?.topAssets ?? [], [summary]);
 
@@ -291,7 +268,7 @@ export default function AssetsPage() {
 
     setIsSubmitting(true);
     try {
-      const response = await requestJson<AssetMutationResponse>(
+      const response = await requestMutation<AssetMutationResponse>(
         editingSource ? `/api/assets/sources/${editingSource.id}` : "/api/assets/sources",
         {
           method: editingSource ? "PATCH" : "POST",
@@ -302,13 +279,14 @@ export default function AssetsPage() {
       setSourceFormOpen(false);
       setEditingSource(null);
       applyAssetMutationResponse(response);
-      await refreshAllAssetData(response.summary);
+      refreshVisibleAssetData(response.summary);
       toast.success(response.error ? t("assets.toast.saveSourceWarn") : t("assets.toast.saveSource"));
       if (response.error) {
         toast.message(response.error);
       }
     } catch (error: any) {
-      toast.error(error?.message ?? t("assets.toast.saveSourceFailed"));
+      if (!alive.current) return;
+      toast.error(error?.message ? t(error.message) : t("assets.toast.saveSourceFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -316,22 +294,26 @@ export default function AssetsPage() {
 
   async function handleSyncSource(sourceId: number) {
     if (syncingSourceId !== null || deletingSourceId !== null || isSyncingAll) {
-      return;
+      return false;
     }
 
     setSyncingSourceId(sourceId);
     try {
-      const response = await requestJson<AssetMutationResponse>(`/api/assets/sources/${sourceId}/sync`, {
+      const response = await requestMutation<AssetMutationResponse>(`/api/assets/sources/${sourceId}/sync`, {
         method: "POST",
       });
       applyAssetMutationResponse(response);
-      await refreshAllAssetData(response.summary);
-      toast.success(response.error ? t("assets.toast.syncWarn") : t("assets.toast.syncDone"));
+      refreshVisibleAssetData(response.summary);
+      if (response.error) toast.warning(t("assets.toast.syncWarn"));
+      else toast.success(t("assets.toast.syncDone"));
       if (response.error) {
         toast.message(response.error);
       }
+      return !response.error;
     } catch (error: any) {
-      toast.error(error?.message ?? t("assets.toast.syncFailed"));
+      if (!alive.current) return false;
+      toast.error(error?.message ? t(error.message) : t("assets.toast.syncFailed"));
+      return false;
     } finally {
       setSyncingSourceId(null);
     }
@@ -343,25 +325,17 @@ export default function AssetsPage() {
     }
 
     setDeletingSourceId(sourceId);
-    const deletedSource = sources.find((source) => source.id === sourceId) ?? null;
-    setSources((current) => current.filter((source) => source.id !== sourceId));
 
     try {
-      const response = await requestJson<AssetMutationResponse>(`/api/assets/sources/${sourceId}`, {
+      const response = await requestMutation<AssetMutationResponse>(`/api/assets/sources/${sourceId}`, {
         method: "DELETE",
       });
       applyAssetMutationResponse(response);
-      await refreshAllAssetData(response.summary);
+      refreshVisibleAssetData(response.summary);
       toast.success(t("assets.toast.deleteSource"));
     } catch (error: any) {
-      if (deletedSource) {
-        setSources((current) =>
-          current.some((source) => source.id === deletedSource.id)
-            ? current
-            : [deletedSource, ...current]
-        );
-      }
-      toast.error(error?.message ?? t("assets.toast.deleteSourceFailed"));
+      if (!alive.current) return;
+      toast.error(error?.message ? t(error.message) : t("assets.toast.deleteSourceFailed"));
     } finally {
       setDeletingSourceId(null);
     }
@@ -376,13 +350,13 @@ export default function AssetsPage() {
     try {
       let response: AssetMutationResponse;
       if (editingManualAsset) {
-        response = await requestJson<AssetMutationResponse>(`/api/assets/manual/${editingManualAsset.id}`, {
+        response = await requestMutation<AssetMutationResponse>(`/api/assets/manual/${editingManualAsset.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
       } else {
-        response = await requestJson<AssetMutationResponse>("/api/assets/manual", {
+        response = await requestMutation<AssetMutationResponse>("/api/assets/manual", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -391,10 +365,11 @@ export default function AssetsPage() {
       setManualFormOpen(false);
       setEditingManualAsset(null);
       applyAssetMutationResponse(response);
-      await refreshAllAssetData(response.summary);
+      refreshVisibleAssetData(response.summary);
       toast.success(t("assets.toast.saveManual"));
     } catch (error: any) {
-      toast.error(error?.message ?? t("assets.toast.saveManualFailed"));
+      if (!alive.current) return;
+      toast.error(error?.message ? t(error.message) : t("assets.toast.saveManualFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -407,15 +382,16 @@ export default function AssetsPage() {
 
     setDeletingManualAssetId(assetId);
     try {
-      const response = await requestJson<AssetMutationResponse>(`/api/assets/manual/${assetId}`, {
+      const response = await requestMutation<AssetMutationResponse>(`/api/assets/manual/${assetId}`, {
         method: "DELETE",
       });
       setManualAssets((current) => current.filter((asset) => asset.id !== assetId));
       applyAssetMutationResponse(response);
-      await refreshAllAssetData(response.summary);
+      refreshVisibleAssetData(response.summary);
       toast.success(t("assets.toast.deleteManual"));
     } catch (error: any) {
-      toast.error(error?.message ?? t("assets.toast.deleteManualFailed"));
+      if (!alive.current) return;
+      toast.error(error?.message ? t(error.message) : t("assets.toast.deleteManualFailed"));
     } finally {
       setDeletingManualAssetId(null);
     }
@@ -428,16 +404,18 @@ export default function AssetsPage() {
 
     setIsSyncingAll(true);
     try {
-      const response = await requestJson<AssetMutationResponse>("/api/assets/sync", {
+      const response = await requestMutation<AssetMutationResponse>("/api/assets/sync", {
         method: "POST",
       });
       applyAssetMutationResponse(response);
-      await refreshAllAssetData(response.summary);
-      toast.success(
-        t("assets.toast.syncAll", { count: response.results?.length ?? 0 })
-      );
+      refreshVisibleAssetData(response.summary);
+      const failures = response.results?.filter(result => result.error).length ?? 0;
+      if (failures === response.results?.length && failures > 0) toast.error(t('assets.toast.syncFailed'));
+      else if (failures > 0) toast.warning(t('assets.toast.syncWarn'));
+      else toast.success(t("assets.toast.syncAll", { count: response.results?.length ?? 0 }));
     } catch (error: any) {
-      toast.error(error?.message ?? t("assets.toast.syncAllFailed"));
+      if (!alive.current) return;
+      toast.error(error?.message ? t(error.message) : t("assets.toast.syncAllFailed"));
     } finally {
       setIsSyncingAll(false);
     }
@@ -508,6 +486,14 @@ export default function AssetsPage() {
           </Card>
         ) : null}
 
+        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground" aria-live="polite">
+          {updatedAt ? <span>{t('request.updated', { time: new Date(updatedAt).toLocaleTimeString() })}</span> : null}
+          {tabErrors.overview || tabErrors[activeTab] || uncertain ? <span role="alert">{t(uncertain ? 'request.uncertain' : tabErrors[activeTab] || tabErrors.overview)}</span> : null}
+          <Button variant="ghost" size="sm" disabled={isSubmitting || isSourceActionPending} onClick={() => { void loadSummary(true); if (activeTab !== 'overview') void loadTabData(activeTab, true); }}>{t('request.refresh')}</Button>
+          {uncertain ? <Button variant="outline" size="sm" onClick={() => setUncertain(false)}>{t('request.checked')}</Button> : null}
+          {(tabLoading.overview || tabLoading[activeTab]) && summary ? <span role="status">{t('request.refreshing')}</span> : null}
+          <OperationStatus pending={isSubmitting || isSourceActionPending || deletingManualAssetId !== null} />
+        </div>
         {summary ? <AssetSummaryCards summary={summary.summary} /> : null}
 
         <div className="mt-8 flex flex-wrap gap-2">
@@ -552,19 +538,22 @@ export default function AssetsPage() {
                     assets={topAssets}
                     isAuthenticated={isAuthenticated}
                     formatDisplayCurrency={formatDisplayCurrency}
-                    onSummaryChange={setSummary}
+                    onSyncSource={handleSyncSource}
+                    refreshVersion={updatedAt}
+                    isActionPending={isSourceActionPending}
                   />
                 </CardContent>
               </Card>
             </>
           ) : null}
 
+          {activeTab !== "overview" && !loadedTabs[activeTab] ? (tabErrors[activeTab] ? null : <LoadingPanel />) : <>
           {activeTab === "trend" ? (
             <AssetTrendChart
               snapshots={snapshots}
               range={trendRange}
               onRangeChange={setTrendRange}
-              isLoading={isDetailLoading}
+              isLoading={isDetailLoading && !loadedTabs[activeTab]}
             />
           ) : null}
 
@@ -578,7 +567,7 @@ export default function AssetsPage() {
               }}
               onDelete={handleDeleteSource}
               isAuthenticated={isAuthenticated}
-              isLoading={isDetailLoading}
+              isLoading={isDetailLoading && !loadedTabs[activeTab]}
               syncingSourceId={syncingSourceId}
               deletingSourceId={deletingSourceId}
               isActionPending={isSourceActionPending}
@@ -595,23 +584,24 @@ export default function AssetsPage() {
               onDelete={handleDeleteManualAsset}
               isAuthenticated={isAuthenticated}
               deletingAssetId={deletingManualAssetId}
-              isLoading={isDetailLoading}
+              isLoading={isDetailLoading && !loadedTabs[activeTab]}
             />
           ) : null}
 
           {activeTab === "balances" ? (
-            <AssetBalanceTable balances={balances} positions={positions} isLoading={isDetailLoading} />
+            <AssetBalanceTable balances={balances} positions={positions} isLoading={isDetailLoading && !loadedTabs[activeTab]} />
           ) : null}
 
           {activeTab === "health" ? (
             <AssetHealthPanel
               failedSources={health.failedSources}
               syncLogs={health.syncLogs}
-              isLoading={isDetailLoading}
+              isLoading={isDetailLoading && !loadedTabs[activeTab]}
             />
           ) : null}
 
-          {isPageLoading ? (
+          </>}
+          {isPageLoading && !summary ? (
             <div className="rounded-lg border border-dashed border-border/70 px-4 py-10 text-center text-sm text-muted-foreground">
               <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin" />
               {t("assets.loading")}
@@ -620,7 +610,7 @@ export default function AssetsPage() {
         </div>
       </main>
 
-      <AssetSourceForm
+      {sourceFormOpen && <AssetSourceForm
         open={sourceFormOpen}
         onOpenChange={(open) => {
           setSourceFormOpen(open);
@@ -631,8 +621,8 @@ export default function AssetsPage() {
         source={editingSource}
         onSubmit={handleSaveSource}
         isSubmitting={isSubmitting}
-      />
-      <ManualAssetForm
+      />}
+      {manualFormOpen && <ManualAssetForm
         open={manualFormOpen}
         onOpenChange={(open) => {
           setManualFormOpen(open);
@@ -643,7 +633,7 @@ export default function AssetsPage() {
         asset={editingManualAsset}
         onSubmit={handleSaveManualAsset}
         isSubmitting={isSubmitting}
-      />
+      />}
     </div>
   );
 }

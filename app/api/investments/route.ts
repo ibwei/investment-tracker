@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import {
@@ -19,32 +20,32 @@ function handleRouteError(error) {
   );
 }
 
-export async function GET() {
+export const GET = timedRoute(async function (request) {
   try {
     const session = await requireSession();
-    return NextResponse.json(await getDashboardSnapshot(session.userId));
+    return NextResponse.json(await getDashboardSnapshot(session.userId, { compact: new URL(request.url).searchParams.get("response") === "delta" }));
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
 
-export async function POST(request) {
+export const POST = timedRoute(async function (request) {
   try {
     const session = await requireSameOriginSession(request);
     const body = await request.json();
-    return NextResponse.json(await createInvestment(session.userId, body));
+    return NextResponse.json(await createInvestment(session.userId, body, { compact: new URL(request.url).searchParams.get("response") === "delta" }));
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
 
-export async function DELETE(request) {
+export const DELETE = timedRoute(async function (request) {
   try {
     const session = await requireSameOriginSession(request);
     return NextResponse.json({
-      snapshot: await clearAllInvestments(session.userId)
+      snapshot: await clearAllInvestments(session.userId, { compact: new URL(request.url).searchParams.get("response") === "delta" })
     });
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

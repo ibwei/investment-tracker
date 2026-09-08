@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSameOriginSession } from "@/lib/auth";
 import { syncAllAssetSources } from "@/lib/assets/service";
@@ -12,11 +13,11 @@ function handleRouteError(error: any) {
   );
 }
 
-export async function POST(request: Request) {
+export const POST = timedRoute(async function (request: Request) {
   try {
     const session = await requireSameOriginSession(request);
     return NextResponse.json(await syncAllAssetSources(session.userId));
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

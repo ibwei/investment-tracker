@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { useAuth } from '@/components/auth-provider'
 import { DEFAULT_APP_TIMEZONE, formatInAppTimeZone, isSupportedTimeZone } from '@/lib/time'
 
 type Locale = 'en' | 'zh'
@@ -38,6 +39,7 @@ type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number]
 
 const translations = {
   en: {
+    request: { snapshotSaved: 'Snapshot saved.', pending: 'An operation is already in progress.', saving: 'Saving…', deleting: 'Deleting…', ending: 'Ending…', slow: 'This is taking longer than usual. Please wait.', failed: 'Unable to load data. Please retry.', refreshFailed: 'Your confirmed data is preserved. Refresh is temporarily unavailable.', uncertain: 'The result is not confirmed. Refresh and check your records before trying again.', sessionChanged: 'Your session changed. Please check the current account.', refresh: 'Refresh', checked: 'I have checked my records', loading: 'Loading your data…', updated: 'Updated {time}', refreshing: 'Refreshing…' },
     common: {
       brand: 'Earn Compass',
       language: 'Language',
@@ -556,6 +558,7 @@ const translations = {
     },
   },
   zh: {
+    request: { snapshotSaved: '快照已保存。', pending: '操作正在处理中。', saving: '正在保存…', deleting: '正在删除…', ending: '正在结束…', slow: '处理时间较长，请稍候。', failed: '数据加载失败，请重试。', refreshFailed: '已保留确认的数据，暂时无法刷新最新汇总。', uncertain: '结果待确认，请刷新并核对记录后再尝试。', sessionChanged: '登录状态已变化，请核对当前账号。', refresh: '刷新', checked: '我已核对记录', loading: '正在加载数据…', updated: '更新于 {time}', refreshing: '正在刷新…' },
     common: {
       brand: 'Earn Compass',
       language: '语言',
@@ -1175,6 +1178,7 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | null>(null)
 
 export function I18nProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
   const [locale, setLocaleState] = useState<Locale>('en')
   const [displayCurrency, setDisplayCurrencyState] = useState<DisplayCurrency>('USD')
   const [timezone, setTimezoneState] = useState(DEFAULT_APP_TIMEZONE)
@@ -1210,29 +1214,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [timezone])
 
   useEffect(() => {
-    let isMounted = true
-
-    async function loadUserPreferences() {
-      try {
-        const response = await fetch('/api/auth/session', { cache: 'no-store' })
-        const payload = await response.json()
-
-        if (!isMounted || !isSupportedTimeZone(payload?.user?.timezone)) {
-          return
-        }
-
-        setTimezoneState(payload.user.timezone)
-      } catch {
-        // Keep the local preference when the user profile cannot be loaded.
-      }
-    }
-
-    void loadUserPreferences()
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
+    if (isSupportedTimeZone(user?.timezone)) setTimezoneState(user.timezone)
+  }, [user?.timezone])
 
   useEffect(() => {
     let isMounted = true
@@ -1278,18 +1261,20 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<I18nContextValue>(() => {
     const t = (key: string, params?: TranslationParams) => translate(locale, key, params)
+    const numberFormats = new Map<string, Intl.NumberFormat>()
     const formatCurrencyValue = (
       value: number,
       currency = 'USD',
       maximumFractionDigits = 2,
-    ) =>
-      new Intl.NumberFormat(getIntlLocale(locale), {
-        style: 'currency',
-        currency,
+    ) => {
+      const key = `${currency}:${maximumFractionDigits}`
+      if (!numberFormats.has(key)) numberFormats.set(key, new Intl.NumberFormat(getIntlLocale(locale), {
+        style: 'currency', currency,
         currencyDisplay: currency === 'CNY' ? 'narrowSymbol' : 'symbol',
-        minimumFractionDigits: Math.min(2, maximumFractionDigits),
-        maximumFractionDigits,
-      }).format(value)
+        minimumFractionDigits: Math.min(2, maximumFractionDigits), maximumFractionDigits,
+      }))
+      return numberFormats.get(key).format(value)
+    }
 
     return {
       locale,

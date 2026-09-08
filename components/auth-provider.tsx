@@ -1,7 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, Fragment, useLayoutEffect } from "react";
 
+import { useInvestmentStore } from "@/lib/store";
+import { invalidateResources } from "@/lib/client-request";
 import type { AuthUser } from "@/lib/types";
 import { setLocalUserScope } from "@/lib/storage/local-user-scope";
 
@@ -20,7 +22,25 @@ export function AuthProvider({
   children: React.ReactNode;
   initialUser?: AuthUser | null;
 }) {
-  const [user, setUser] = useState<AuthUser | null>(initialUser);
+  const [user, setUserState] = useState<AuthUser | null>(initialUser);
+
+  const setUser = useCallback((nextUser: AuthUser | null) => {
+    if (nextUser?.id !== user?.id) {
+      invalidateResources();
+      useInvestmentStore.getState().resetScope(nextUser?.id ? `user:${nextUser.id}` : 'guest');
+    }
+    setUserState(nextUser);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const expireSession = () => setUser(null);
+    window.addEventListener('earn:session-expired', expireSession);
+    return () => window.removeEventListener('earn:session-expired', expireSession);
+  }, [setUser]);
+
+  useLayoutEffect(() => {
+    useInvestmentStore.getState().resetScope(user?.id ? `user:${user.id}` : 'guest');
+  }, [user?.id]);
 
   useEffect(() => {
     setLocalUserScope(user?.id ? `user:${user.id}` : "guest");
@@ -32,10 +52,10 @@ export function AuthProvider({
       isAuthenticated: Boolean(user),
       setUser
     }),
-    [user]
+    [user, setUser]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}><Fragment key={user?.id ?? "guest"}>{children}</Fragment></AuthContext.Provider>;
 }
 
 export function useAuth() {

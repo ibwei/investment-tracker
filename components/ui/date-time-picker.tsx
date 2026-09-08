@@ -63,8 +63,8 @@ export function DateTimePicker({
           onChange?.(nextValue ? toUtcISOString(nextValue.format(STORAGE_FORMAT)) : '')
         }
         getPopupContainer={() => document.body}
-        popupClassName="earn-date-time-popup"
-        popupStyle={{ zIndex: 1600 }}
+        classNames={{ popup: { root: "earn-date-time-popup" } }}
+        styles={{ popup: { root: { zIndex: 1600 } } }}
         placement="bottomLeft"
         className={className}
         style={{ width: '100%' }}

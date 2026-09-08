@@ -1,65 +1,55 @@
-async function request(url, options) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers ?? {})
-    }
-  });
-
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "远程请求失败。");
-  }
-
-  return payload;
-}
+import { requestJson } from "@/lib/client-request";
 
 export const remoteInvestmentRepository = {
-  async getSnapshot() {
-    return request("/api/investments", {
+  async getSnapshot(options: { compact?: boolean; signal?: AbortSignal } = {}) {
+    return requestJson(options.compact ? "/api/investments?response=delta" : "/api/investments", {
+      signal: options.signal,
       method: "GET",
       cache: "no-store"
     });
   },
 
-  async create(payload) {
-    const result = await request("/api/investments", {
+  async create(payload, options: { compact?: boolean; signal?: AbortSignal } = {}) {
+    const result = await requestJson(`/api/investments${options.compact ? "?response=delta" : ""}`, {
+      signal: options.signal,
       method: "POST",
       body: JSON.stringify(payload)
     });
-    return result.snapshot;
+    return options.compact ? (result.snapshot ?? result) : result.snapshot;
   },
 
-  async update(id, payload) {
-    const result = await request(`/api/investments/${id}`, {
+  async update(id, payload, options: { compact?: boolean; signal?: AbortSignal } = {}) {
+    const result = await requestJson(`/api/investments/${id}${options.compact ? "?response=delta" : ""}`, {
+      signal: options.signal,
       method: "PATCH",
       body: JSON.stringify(payload)
     });
-    return result.snapshot;
+    return options.compact ? (result.snapshot ?? result) : result.snapshot;
   },
 
-  async remove(id, confirmationText) {
-    const result = await request(`/api/investments/${id}`, {
+  async remove(id, confirmationText, options: { compact?: boolean; signal?: AbortSignal } = {}) {
+    const result = await requestJson(`/api/investments/${id}${options.compact ? "?response=delta" : ""}`, {
+      signal: options.signal,
       method: "DELETE",
       body: JSON.stringify({ confirmationText })
     });
-    return result.snapshot;
+    return options.compact ? (result.snapshot ?? result) : result.snapshot;
   },
 
-  async earlyClose(id, payload) {
-    const result = await request(`/api/investments/${id}/finish`, {
+  async earlyClose(id, payload, options: { compact?: boolean; signal?: AbortSignal } = {}) {
+    const result = await requestJson(`/api/investments/${id}/finish${options.compact ? "?response=delta" : ""}`, {
+      signal: options.signal,
       method: "POST",
       body: JSON.stringify(payload)
     });
-    return result.snapshot;
+    return options.compact ? (result.snapshot ?? result) : result.snapshot;
   },
 
-  async clearAll() {
-    const result = await request("/api/investments", {
+  async clearAll(options: { compact?: boolean; signal?: AbortSignal } = {}) {
+    const result = await requestJson(`/api/investments${options.compact ? "?response=delta" : ""}`, {
+      signal: options.signal,
       method: "DELETE"
     });
-    return result.snapshot;
+    return options.compact ? (result.snapshot ?? result) : result.snapshot;
   }
 };

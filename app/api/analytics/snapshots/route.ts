@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import {
@@ -18,7 +19,7 @@ function handleRouteError(error) {
   );
 }
 
-export async function GET(request) {
+export const GET = timedRoute(async function (request) {
   try {
     const session = await requireSession();
     const { searchParams } = new URL(request.url);
@@ -31,9 +32,9 @@ export async function GET(request) {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
 
-export async function POST(request) {
+export const POST = timedRoute(async function (request) {
   try {
     const session = await requireSameOriginSession(request);
     return NextResponse.json({
@@ -42,4 +43,4 @@ export async function POST(request) {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

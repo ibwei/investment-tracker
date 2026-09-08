@@ -1,6 +1,8 @@
 "use client";
 
+import { LoadingPanel } from "@/components/ui/operation-status";
 import { useEffect } from "react";
+import { InvestmentDataStatus } from "@/components/dashboard/data-status";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
@@ -17,7 +19,7 @@ const EarningsChart = dynamic(
     import("@/components/analytics/earnings-chart").then(
       (module) => module.EarningsChart
     ),
-  { ssr: false }
+  { ssr: false, loading: () => <div className="h-80 animate-pulse rounded-xl bg-muted" /> }
 );
 
 const AprDistribution = dynamic(
@@ -25,7 +27,7 @@ const AprDistribution = dynamic(
     import("@/components/analytics/apr-distribution").then(
       (module) => module.AprDistribution
     ),
-  { ssr: false }
+  { ssr: false, loading: () => <div className="h-80 animate-pulse rounded-xl bg-muted" /> }
 );
 
 const ProjectBreakdown = dynamic(
@@ -33,7 +35,7 @@ const ProjectBreakdown = dynamic(
     import("@/components/analytics/project-breakdown").then(
       (module) => module.ProjectBreakdown
     ),
-  { ssr: false }
+  { ssr: false, loading: () => <div className="h-80 animate-pulse rounded-xl bg-muted" /> }
 );
 
 const PortfolioIncomeVolatility = dynamic(
@@ -41,7 +43,7 @@ const PortfolioIncomeVolatility = dynamic(
     import("@/components/analytics/portfolio-income-volatility").then(
       (module) => module.PortfolioIncomeVolatility
     ),
-  { ssr: false }
+  { ssr: false, loading: () => <div className="h-80 animate-pulse rounded-xl bg-muted" /> }
 );
 
 const RealSnapshotTrend = dynamic(
@@ -49,24 +51,27 @@ const RealSnapshotTrend = dynamic(
     import("@/components/analytics/real-snapshot-trend").then(
       (module) => module.RealSnapshotTrend
     ),
-  { ssr: false }
+  { ssr: false, loading: () => <div className="h-80 animate-pulse rounded-xl bg-muted" /> }
 );
 
 export default function AnalyticsPage() {
+  const loadError = useInvestmentStore(state => state.errorMessage);
+  const hasInitialized = useInvestmentStore(state => state.hasInitialized);
   const initialize = useInvestmentStore((state) => state.initialize);
   const isPreviewMode = useInvestmentStore((state) => state.isPreviewMode);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { t } = useI18n();
 
   useEffect(() => {
-    void initialize({ preview: !isAuthenticated });
-  }, [initialize, isAuthenticated]);
+    void initialize({ preview: !isAuthenticated, userId: user?.id });
+  }, [initialize, isAuthenticated, user?.id]);
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <InvestmentDataStatus />
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {t("analytics.title")}
@@ -99,6 +104,7 @@ export default function AnalyticsPage() {
           </Card>
         ) : null}
 
+        {!hasInitialized ? (loadError ? null : <LoadingPanel />) : <>
         <section className="mb-6 sm:mb-8">
           <IncomeOverview />
         </section>
@@ -124,6 +130,7 @@ export default function AnalyticsPage() {
             <ProjectBreakdown />
           </section>
         </div>
+        </>}
       </main>
     </div>
   );

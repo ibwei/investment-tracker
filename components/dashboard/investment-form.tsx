@@ -1,5 +1,6 @@
 'use client'
 
+import { OperationStatus } from '@/components/ui/operation-status'
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -171,7 +172,8 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
       }
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('form.saveFailed'))
+      if (error instanceof Error && error.message === 'request.sessionChanged') return
+      toast.error(error instanceof Error ? t(error.message) : t('form.saveFailed'))
     }
   }
 
@@ -184,7 +186,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
         }
       }}
     >
-      <DialogContent
+      <DialogContent aria-describedby={undefined}
         className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
         showCloseButton={!isSubmitting}
       >
@@ -444,6 +446,7 @@ export function InvestmentForm({ open, onOpenChange, investment }: InvestmentFor
               >
                 {t('common.cancel')}
               </Button>
+              <OperationStatus pending={isSubmitting} />
               <Button type="submit" loading={isSubmitting}>
                 {investment ? t('common.saveChanges') : t('common.addInvestment')}
               </Button>

@@ -62,7 +62,7 @@ export function AssetTrendChart({
       <CardContent>
         {chartData.length > 0 ? (
           <div className="relative h-[320px] min-h-0 min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 320 }}>
               <AreaChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.3 0 0)" vertical={false} />
                 <XAxis

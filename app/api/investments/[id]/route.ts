@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSameOriginSession } from "@/lib/auth";
 import {
@@ -28,27 +29,27 @@ function parseId(rawId) {
   return id;
 }
 
-export async function PATCH(request, context) {
+export const PATCH = timedRoute(async function (request, context) {
   try {
     const session = await requireSameOriginSession(request);
     const id = parseId((await context.params).id);
     const body = await request.json();
-    return NextResponse.json(await updateInvestment(session.userId, id, body));
+    return NextResponse.json(await updateInvestment(session.userId, id, body, { compact: new URL(request.url).searchParams.get("response") === "delta" }));
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
 
-export async function DELETE(request, context) {
+export const DELETE = timedRoute(async function (request, context) {
   try {
     const session = await requireSameOriginSession(request);
     const id = parseId((await context.params).id);
     const body = await request.json();
     return NextResponse.json({
       success: true,
-      snapshot: await softDeleteInvestment(session.userId, id, body?.confirmationText)
+      snapshot: await softDeleteInvestment(session.userId, id, body?.confirmationText, { compact: new URL(request.url).searchParams.get("response") === "delta" })
     });
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

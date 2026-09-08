@@ -141,6 +141,8 @@ export function diffAppCalendarDays(startValue, endValue, timeZone = DEFAULT_APP
   return Math.max(0, end.diff(start, "day"));
 }
 
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+
 export function formatInAppTimeZone(value, locale, options = {}, timeZone = DEFAULT_APP_TIMEZONE) {
   const resolvedTimeZone = resolveAppTimeZone(timeZone);
   const normalized = typeof value === "string" ? value.trim() : "";
@@ -152,8 +154,11 @@ export function formatInAppTimeZone(value, locale, options = {}, timeZone = DEFA
     return "";
   }
 
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: shouldApplyShanghaiOffset ? "UTC" : resolvedTimeZone,
-    ...options,
-  }).format(parsed.toDate());
+  const formatOptions = { timeZone: shouldApplyShanghaiOffset ? "UTC" : resolvedTimeZone, ...options };
+  const key = JSON.stringify([locale, formatOptions]);
+  if (!dateFormats.has(key)) {
+    if (dateFormats.size >= 100) dateFormats.clear();
+    dateFormats.set(key, new Intl.DateTimeFormat(locale, formatOptions));
+  }
+  return dateFormats.get(key).format(parsed.toDate());
 }

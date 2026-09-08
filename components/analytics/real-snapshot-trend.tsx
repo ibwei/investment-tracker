@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { readResource, invalidateResources } from '@/lib/client-request'
+import { toast } from 'sonner'
 import { useAuth } from '@/components/auth-provider'
 import { useI18n } from '@/lib/i18n'
 import { previewSnapshots } from '@/lib/preview-data'
@@ -30,13 +32,17 @@ interface PortfolioSnapshot {
 
 export function RealSnapshotTrend() {
   const { t, formatDate, formatDisplayCurrency } = useI18n()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
+  const scope = user?.id ? `user:${user.id}` : 'guest'
+  const generation = useRef(0)
+  const mounted = useRef(true)
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCapturing, setIsCapturing] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
-  async function loadSnapshots() {
+  async function loadSnapshots(force = false) {
+    const current = ++generation.current
     if (!isAuthenticated) {
       setSnapshots(previewSnapshots)
       setErrorMessage('')
@@ -47,34 +53,27 @@ export function RealSnapshotTrend() {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/analytics/snapshots?days=90', {
-        method: 'GET',
-        cache: 'no-store',
-      })
-      const payload = await response.json()
-
-      if (!response.ok) {
-        throw new Error(payload.error || 'Failed to load snapshots.')
-      }
+      const payload = await readResource<{ snapshots: PortfolioSnapshot[] }>(scope, '/api/analytics/snapshots?days=90', force)
+      if (generation.current !== current) return
 
       setSnapshots(payload.snapshots ?? [])
       setErrorMessage('')
     } catch (error: any) {
-      setErrorMessage(error?.message ?? 'Failed to load snapshots.')
+      if (generation.current === current) setErrorMessage(error?.message ?? 'request.refreshFailed')
     } finally {
-      setIsLoading(false)
+      if (generation.current === current) setIsLoading(false)
     }
   }
 
   useEffect(() => {
+    mounted.current = true
     void loadSnapshots()
-  }, [isAuthenticated])
+    return () => { mounted.current = false; generation.current += 1 }
+  }, [scope])
 
   async function handleCapture() {
-    if (!isAuthenticated) {
-      return
-    }
-
+    if (!isAuthenticated || isCapturing) return
+    const current = generation.current
     setIsCapturing(true)
 
     try {
@@ -87,11 +86,14 @@ export function RealSnapshotTrend() {
         throw new Error(payload.error || 'Failed to capture snapshot.')
       }
 
-      await loadSnapshots()
+      if (generation.current !== current) return
+      invalidateResources(scope, '/api/analytics/snapshots')
+      toast.success(t('request.snapshotSaved'))
+      void loadSnapshots(true)
     } catch (error: any) {
-      setErrorMessage(error?.message ?? 'Failed to capture snapshot.')
+      if (generation.current === current) setErrorMessage(error?.message ?? 'Failed to capture snapshot.')
     } finally {
-      setIsCapturing(false)
+      if (mounted.current) setIsCapturing(false)
     }
   }
 
@@ -135,7 +137,7 @@ export function RealSnapshotTrend() {
 
         {errorMessage ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {errorMessage}
+            {t(errorMessage)}
           </div>
         ) : null}
 

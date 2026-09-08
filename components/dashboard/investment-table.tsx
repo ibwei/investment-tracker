@@ -1,5 +1,6 @@
 'use client'
 
+import { OperationStatus } from '@/components/ui/operation-status'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -23,7 +24,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { DateTimePicker } from '@/components/ui/date-time-picker'
+import dynamic from 'next/dynamic'
+const DateTimePicker = dynamic(() => import('@/components/ui/date-time-picker').then(module => module.DateTimePicker))
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -176,6 +178,11 @@ function isActiveInvestment(status: Investment['status']) {
 }
 
 export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableProps) {
+  const pendingIds = useInvestmentStore(state => state.pendingIds)
+  const changedId = useInvestmentStore(state => state.changedId)
+  const changedAt = useInvestmentStore(state => state.changedAt)
+  const [highlight, setHighlight] = useState<string | null>(null)
+  useEffect(() => { setHighlight(changedId); const timer = setTimeout(() => setHighlight(null), 2500); return () => clearTimeout(timer) }, [changedId, changedAt])
   const allInvestments = useInvestmentStore((state) => state.investments)
   const isPreviewMode = useInvestmentStore((state) => state.isPreviewMode)
   const filters = useInvestmentStore((state) => state.filters)
@@ -261,7 +268,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
   }
 
   const handleDelete = async () => {
-    if (deleteDialog && deleteConfirm === deleteConfirmationKeyword) {
+    if (!isDeletePending && deleteDialog && deleteConfirm === deleteConfirmationKeyword) {
       setIsDeletePending(true)
       try {
         await deleteInvestment(deleteDialog.id)
@@ -269,7 +276,8 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
         setDeleteConfirm('')
         toast.success(t('table.deleteSuccess'))
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : t('table.deleteFailed'))
+        if (error instanceof Error && error.message === 'request.sessionChanged') return
+        toast.error(error instanceof Error ? t(error.message) : t('table.deleteFailed'))
       } finally {
         setIsDeletePending(false)
       }
@@ -277,7 +285,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
   }
 
   const handleEnd = async () => {
-    if (endDialog) {
+    if (!isEndPending && endDialog) {
       const payload: EndInvestmentData = {
         endDate: endDialog.endDate,
         actualApr: parseOptionalNumber(endDialog.actualApr),
@@ -291,7 +299,8 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
         setEndDialog(null)
         toast.success(t('table.endSuccess'))
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : t('table.endFailed'))
+        if (error instanceof Error && error.message === 'request.sessionChanged') return
+        toast.error(error instanceof Error ? t(error.message) : t('table.endFailed'))
       } finally {
         setIsEndPending(false)
       }
@@ -409,6 +418,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
           size="icon"
           className="h-8 w-8"
           aria-label={t('common.actions')}
+          disabled={pendingIds.includes(investment.id) || pendingIds.includes('*')}
         >
           <MoreHorizontal className="h-4 w-4" />
         </Button>
@@ -534,7 +544,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                     </TableRow>
                   ) : (
                     activeInvestments.map((investment) => (
-                      <TableRow key={investment.id} className="border-border/30 hover:bg-secondary/30">
+                      <TableRow key={investment.id} data-changed={highlight === investment.id || undefined} className="border-border/30 hover:bg-secondary/30">
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             {investment.project}
@@ -669,7 +679,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                     </TableRow>
                   ) : (
                     historicalInvestments.map((investment) => (
-                      <TableRow key={investment.id} className="border-border/30 hover:bg-secondary/30">
+                      <TableRow key={investment.id} data-changed={highlight === investment.id || undefined} className="border-border/30 hover:bg-secondary/30">
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             {investment.project}
@@ -758,7 +768,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('table.deleteInvestment')}</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
+            <AlertDialogDescription asChild><div className="space-y-3">
               <p>
                 {t('table.deleteDescription', {
                   project: deleteDialog?.project ?? '',
@@ -793,9 +803,10 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                   disabled={isDeletePending}
                 />
               </div>
-            </AlertDialogDescription>
+            </div></AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <OperationStatus pending={isDeletePending} action="deleting" />
+            <AlertDialogFooter>
             <AlertDialogCancel
               className="border-border bg-background hover:bg-muted hover:text-foreground"
               disabled={isDeletePending}
@@ -828,7 +839,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
         <DialogContent className="sm:max-w-[560px]" showCloseButton={!isEndPending}>
           <DialogHeader>
             <DialogTitle>{t('table.endInvestmentEarly')}</DialogTitle>
-            <DialogDescription className="space-y-2">
+            <DialogDescription asChild><div className="space-y-2">
               <p>
                 {t('table.endDescription', {
                   project: endDialog?.investment.project ?? '',
@@ -836,7 +847,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
                 })}
               </p>
               <p>{t('table.endHint')}</p>
-            </DialogDescription>
+            </div></DialogDescription>
           </DialogHeader>
 
           {endDialog ? (
@@ -938,6 +949,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
             </div>
           ) : null}
 
+          <OperationStatus pending={isEndPending} action="ending" />
           <DialogFooter>
             <Button
               variant="outline"

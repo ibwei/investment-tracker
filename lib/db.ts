@@ -1,3 +1,4 @@
+import { measure } from "@/lib/performance";
 import pg from "pg";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
@@ -74,11 +75,17 @@ function shouldUseSsl(connectionString: string) {
 function createClient() {
   const connectionConfig = getConnectionConfig();
 
-  return new Client({
+  const client = new Client({
     connectionString: connectionConfig.connectionString,
     connectionTimeoutMillis: 5_000,
     ssl: connectionConfig.ssl
   });
+  const originalQuery = client.query.bind(client);
+  client.query = ((...args: any[]) => {
+    const command = typeof args[0] === 'string' ? args[0].trim().split(/\s+/)[0].toUpperCase() : '';
+    return measure(command === 'COMMIT' ? 'db_commit' : 'db_query', () => originalQuery(...args as [any]));
+  }) as typeof client.query;
+  return client;
 }
 
 export function isTransientConnectionError(error: unknown) {
@@ -127,7 +134,7 @@ export async function query<T = Record<string, unknown>>(
     const client = createClient();
 
     try {
-      await client.connect();
+      await measure("db_connect", () => client.connect());
       const result = await client.query<T>(text, [...params]);
       return result.rows;
     } finally {
@@ -149,7 +156,7 @@ export async function execute(text: string, params: QueryParams = []) {
     const client = createClient();
 
     try {
-      await client.connect();
+      await measure("db_connect", () => client.connect());
       return await client.query(text, [...params]);
     } finally {
       await client.end().catch(() => undefined);
@@ -162,7 +169,7 @@ export async function withConnection<T>(callback: (client: QueryClient) => Promi
     const client = createClient();
 
     try {
-      await client.connect();
+      await measure("db_connect", () => client.connect());
       return await callback(client);
     } finally {
       await client.end().catch(() => undefined);
@@ -182,7 +189,7 @@ export async function withTransaction<T>(
     let didBegin = false;
 
     try {
-      await client.connect();
+      await measure("db_connect", () => client.connect());
       await client.query("BEGIN");
       didBegin = true;
       const result = await callback(client);

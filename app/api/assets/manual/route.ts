@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSameOriginSession, requireSession } from "@/lib/auth";
 import { createManualAsset, listManualAssets } from "@/lib/assets/service";
@@ -12,7 +13,7 @@ function handleRouteError(error: any) {
   );
 }
 
-export async function GET(request: Request) {
+export const GET = timedRoute(async function (request: Request) {
   try {
     const session = await requireSession();
     const { searchParams } = new URL(request.url);
@@ -27,13 +28,13 @@ export async function GET(request: Request) {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = timedRoute(async function (request: Request) {
   try {
     const session = await requireSameOriginSession(request);
     return NextResponse.json(await createManualAsset(session.userId, await request.json()));
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

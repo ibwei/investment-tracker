@@ -1,5 +1,6 @@
 "use client";
 
+import { InvestmentDataStatus } from "@/components/dashboard/data-status";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -91,44 +92,19 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, setUser } = useAuth();
 
   useEffect(() => {
-    void initialize({ preview: !isAuthenticated });
-  }, [initialize, isAuthenticated]);
+    void initialize({ preview: !isAuthenticated, userId: user?.id });
+  }, [initialize, isAuthenticated, user?.id]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadSession() {
-      try {
-        const response = await fetch("/api/auth/session", {
-          cache: "no-store"
-        });
-        const payload = await response.json();
-
-        if (!response.ok || !isMounted || !payload.user) {
-          return;
-        }
-
-        setProfile({
-          name: payload.user.name || "",
-          email: payload.user.email || ""
-        });
-        setTimezone(payload.user.timezone || DEFAULT_APP_TIMEZONE);
-      } catch {
-        // Keep prototype defaults when no logged-in session exists.
-      }
-    }
-
-    void loadSession();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    setProfile({ name: user?.name || "", email: user?.email || "" });
+    setTimezone(user?.timezone || DEFAULT_APP_TIMEZONE);
+  }, [user]);
 
   const handleSave = async () => {
+    if (!isAuthenticated || isSaving) return;
     setIsSaving(true);
 
     try {
@@ -148,6 +124,9 @@ export default function SettingsPage() {
         throw new Error(payload.error || t("settings.saveFailed"));
       }
 
+      const payload = await response.json();
+      setUser(payload.user);
+      void initialize({ force: true });
       toast.success(t("settings.saveSuccess"));
     } catch (error) {
       if (profile.email === "demo@example.com") {
@@ -200,6 +179,7 @@ export default function SettingsPage() {
       <Navbar />
 
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+        <InvestmentDataStatus />
         <div className="mb-8">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {t("settings.title")}
@@ -456,7 +436,7 @@ export default function SettingsPage() {
           </Card>
 
           <div className="flex justify-end">
-            <Button onClick={() => void handleSave()} className="gap-2" loading={isSaving}>
+            <Button onClick={() => void handleSave()} className="gap-2" disabled={!isAuthenticated} loading={isSaving}>
               <Save className="h-4 w-4" />
               {isSaving ? t("common.saving") : t("common.saveChanges")}
             </Button>

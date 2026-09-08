@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSameOriginSession } from "@/lib/auth";
 import { deleteManualAsset, updateManualAsset } from "@/lib/assets/service";
@@ -12,7 +13,7 @@ function handleRouteError(error: any) {
   );
 }
 
-export async function PATCH(
+export const PATCH = timedRoute(async function (
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
@@ -25,9 +26,9 @@ export async function PATCH(
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
 
-export async function DELETE(
+export const DELETE = timedRoute(async function (
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
@@ -38,4 +39,4 @@ export async function DELETE(
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

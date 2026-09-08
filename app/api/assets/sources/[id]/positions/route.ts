@@ -1,3 +1,4 @@
+import { timedRoute } from "@/lib/performance";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { listAssetPositions } from "@/lib/assets/service";
@@ -12,7 +13,7 @@ function handleRouteError(error: any) {
   );
 }
 
-export async function GET(
+export const GET = timedRoute(async function (
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
@@ -31,4 +32,4 @@ export async function GET(
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

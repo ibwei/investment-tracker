@@ -1,3 +1,4 @@
+import { measure } from "@/lib/performance";
 import type { NormalizedAssetBalance, NormalizedAssetPosition } from "@/lib/assets/types";
 
 type AssetProviderType = "CEX" | "ONCHAIN";
@@ -82,7 +83,7 @@ function createTimeoutSignal() {
 }
 
 async function postToService<T>(path: string, payload: AssetSyncRequest): Promise<T> {
-  const response = await fetch(`${getServiceBaseUrl()}${path}`, {
+  const response = await measure("provider", () => fetch(`${getServiceBaseUrl()}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -92,7 +93,7 @@ async function postToService<T>(path: string, payload: AssetSyncRequest): Promis
     body: JSON.stringify(payload),
     cache: "no-store",
     signal: createTimeoutSignal(),
-  }).catch((error) => {
+  })).catch((error) => {
     throw new AssetProviderError(
       `CEX DEX service request failed: ${error instanceof Error ? error.message : "Unknown error."}`,
       "PROVIDER_DOWN"
@@ -120,14 +121,14 @@ export async function testSourceConnectionWithCexDexService(payload: AssetSyncRe
 }
 
 export async function proxyCexDexServiceGet(path: string) {
-  const response = await fetch(`${getServiceBaseUrl()}${path}`, {
+  const response = await measure("provider", () => fetch(`${getServiceBaseUrl()}${path}`, {
     headers: {
       accept: "application/json",
       ...getServiceAuthHeaders(),
     },
     cache: "no-store",
     signal: createTimeoutSignal(),
-  }).catch((error) => {
+  })).catch((error) => {
     throw new AssetProviderError(
       `CEX DEX service request failed: ${error instanceof Error ? error.message : "Unknown error."}`,
       "PROVIDER_DOWN"

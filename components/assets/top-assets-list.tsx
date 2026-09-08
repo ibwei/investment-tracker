@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Loader2, RefreshCcw } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
+import { readResource } from "@/lib/client-request";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type {
@@ -20,32 +22,16 @@ type LoadedSourceDetail = {
   syncedAt: string;
 };
 
-type SourceSyncResponse = {
-  summary?: AssetSummaryResponse;
-};
-
 type TopAssetsListProps = {
   assets: SourceSummary[];
   isAuthenticated: boolean;
   formatDisplayCurrency: (value: number) => string;
-  onSummaryChange?: (summary: AssetSummaryResponse) => void;
+  onSyncSource: (id: number) => Promise<boolean>;
+  refreshVersion: number;
+  isActionPending: boolean;
 };
 
 const MIN_VISIBLE_BALANCE_USD = 0.1;
-
-async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
-    cache: "no-store",
-    ...init,
-  });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Request failed.");
-  }
-
-  return payload as T;
-}
 
 function getSourceKey(source: SourceSummary) {
   return `${source.sourceType}:${source.sourceId ?? source.sourceName ?? source.label}`;
@@ -74,17 +60,28 @@ export function TopAssetsList({
   assets,
   isAuthenticated,
   formatDisplayCurrency,
-  onSummaryChange,
+  onSyncSource,
+  refreshVersion,
+  isActionPending,
 }: TopAssetsListProps) {
+  const { user } = useAuth();
+  const scope = user?.id ? `user:${user.id}` : 'guest';
+  const alive = useRef(true);
+  const versions = useRef<Record<string, number>>({});
   const { formatDate, t } = useI18n();
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
   const [sourceDetails, setSourceDetails] = useState<Record<string, LoadedSourceDetail>>({});
-  const [loadingSource, setLoadingSource] = useState<string | null>(null);
+  const [loadingSources, setLoadingSources] = useState<Record<string, boolean>>({});
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    const source = assets.find(item => getSourceKey(item) === expandedSource);
+    if (source) void loadSourceDetail(source, true);
+  }, [refreshVersion]);
 
   async function loadSourceDetail(source: SourceSummary, force = false) {
     const sourceKey = getSourceKey(source);
 
-    if (loadingSource === sourceKey) {
+    if (loadingSources[sourceKey] && !force) {
       return;
     }
 
@@ -95,7 +92,7 @@ export function TopAssetsList({
 
     setExpandedSource(sourceKey);
 
-    if (!force && sourceDetails[sourceKey]) {
+    if (!force && sourceDetails[sourceKey] && Date.now() - Date.parse(sourceDetails[sourceKey].syncedAt) < 30_000) {
       return;
     }
 
@@ -115,18 +112,20 @@ export function TopAssetsList({
       return;
     }
 
-    setLoadingSource(sourceKey);
+    const version = versions.current[sourceKey] = (versions.current[sourceKey] ?? 0) + 1;
+    setLoadingSources(current => ({ ...current, [sourceKey]: true }));
 
     try {
       const [balancePayload, positionPayload] = await Promise.all([
-        requestJson<{ balances: AssetBalanceRecord[] }>(
-          `/api/assets/balances?sourceId=${source.sourceId}&limit=50&offset=0&sort=valueUsd.desc`
+        readResource<{ balances: AssetBalanceRecord[] }>(scope,
+          `/api/assets/balances?sourceId=${source.sourceId}&limit=50&offset=0&sort=valueUsd.desc`, force
         ),
-        requestJson<{ positions: AssetPositionRecord[] }>(
-          `/api/assets/positions?sourceId=${source.sourceId}&limit=50&offset=0&sort=netValueUsd.desc`
+        readResource<{ positions: AssetPositionRecord[] }>(scope,
+          `/api/assets/positions?sourceId=${source.sourceId}&limit=50&offset=0&sort=netValueUsd.desc`, force
         ),
       ]);
 
+      if (!alive.current || version !== versions.current[sourceKey]) return;
       setSourceDetails((current) => ({
         ...current,
         [sourceKey]: {
@@ -136,42 +135,15 @@ export function TopAssetsList({
         },
       }));
     } catch (error: any) {
-      toast.error(error?.message ?? t("assets.topAssets.loadFailed"));
+      if (alive.current && version === versions.current[sourceKey]) toast.error(t("request.refreshFailed"));
     } finally {
-      setLoadingSource(null);
+      if (alive.current && version === versions.current[sourceKey]) setLoadingSources(current => ({ ...current, [sourceKey]: false }));
     }
   }
 
   async function refreshSourceDetail(source: SourceSummary) {
-    const sourceKey = getSourceKey(source);
-
-    if (!source.sourceId || source.sourceType === "MANUAL" || loadingSource === sourceKey) {
-      return;
-    }
-
-    setLoadingSource(sourceKey);
-
-    try {
-      const syncPayload = await requestJson<SourceSyncResponse>(
-        `/api/assets/sources/${source.sourceId}/sync`,
-        {
-          method: "POST",
-        }
-      );
-      if (syncPayload.summary) {
-        onSummaryChange?.(syncPayload.summary);
-      }
-      setSourceDetails((current) => {
-        const next = { ...current };
-        delete next[sourceKey];
-        return next;
-      });
-      await loadSourceDetail(source, true);
-    } catch (error: any) {
-      toast.error(error?.message ?? t("assets.topAssets.loadFailed"));
-    } finally {
-      setLoadingSource(null);
-    }
+    if (!source.sourceId || source.sourceType === 'MANUAL' || isActionPending) return;
+    await onSyncSource(source.sourceId);
   }
 
   if (assets.length === 0) {
@@ -194,7 +166,7 @@ export function TopAssetsList({
             detail?.balances.filter((balance) => Number(balance.valueUsd ?? 0) >= MIN_VISIBLE_BALANCE_USD) ?? [];
           const visiblePositions =
             detail?.positions.filter((position) => Number(position.netValueUsd ?? 0) >= MIN_VISIBLE_BALANCE_USD) ?? [];
-          const isLoading = loadingSource === sourceKey;
+          const isLoading = loadingSources[sourceKey];
 
           return (
             <div key={sourceKey}>
@@ -203,7 +175,7 @@ export function TopAssetsList({
                 className="grid w-full grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 sm:grid-cols-[minmax(140px,1fr)_minmax(220px,1.4fr)_auto]"
                 onClick={() => void loadSourceDetail(source)}
                 aria-expanded={isExpanded}
-                disabled={isLoading}
+                disabled={isLoading || isActionPending}
               >
                 <span className="min-w-0">
                   <span className="flex items-center gap-2">
@@ -250,7 +222,7 @@ export function TopAssetsList({
                           variant="ghost"
                           size="sm"
                           loading={isLoading}
-                          disabled={isLoading}
+                          disabled={isLoading || isActionPending}
                           onClick={() => {
                             void refreshSourceDetail(source);
                           }}

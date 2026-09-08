@@ -1,4 +1,4 @@
-import { execute, query, queryOne, withConnection, withTransaction } from "@/lib/db";
+import { execute, query, queryOne, withTransaction } from "@/lib/db";
 import { toAppDateKey } from "@/lib/time";
 import type {
   AssetBalanceRecord,
@@ -475,16 +475,25 @@ function finalizeSummaryTopAssetGroups(groups: Map<string, SummaryTopAssetGroup>
     .slice(0, 5);
 }
 
-async function countActiveManualAssets(userId: number) {
-  const result = await queryOne<{ count: string }>(
+async function rowsOnClient<T>(client: import("pg").Client | undefined, sql: string, params: unknown[]) {
+  return client ? (await client.query<T>(sql, params)).rows : query<T>(sql, params);
+}
+
+async function mutationSummary(userId: number) {
+  try { return await getAssetSummary(userId); }
+  catch { return undefined; } // The write is committed; the client retries this read separately.
+}
+
+async function countActiveManualAssets(userId: number, client?: import("pg").Client) {
+  const result = await rowsOnClient<{ count: string }>(client,
     `select count(*)::text as count from manual_assets where user_id = $1 and is_deleted = false`,
     [userId]
   );
-  return Number(result?.count ?? 0);
+  return Number(result[0]?.count ?? 0);
 }
 
-async function listAllActiveManualAssets(userId: number) {
-  return query<ManualAssetRecord>(
+async function listAllActiveManualAssets(userId: number, client?: import("pg").Client) {
+  return rowsOnClient<ManualAssetRecord>(client,
     `
       select ${MANUAL_FIELDS}
       from manual_assets
@@ -495,8 +504,8 @@ async function listAllActiveManualAssets(userId: number) {
   );
 }
 
-async function listAllBalances(userId: number) {
-  return query<AssetBalanceRecord>(
+async function listAllBalances(userId: number, client?: import("pg").Client) {
+  return rowsOnClient<AssetBalanceRecord>(client,
     `
       select ${BALANCE_FIELDS}
       from asset_balances
@@ -508,8 +517,8 @@ async function listAllBalances(userId: number) {
   );
 }
 
-async function listAllPositions(userId: number) {
-  return query<AssetPositionRecord>(
+async function listAllPositions(userId: number, client?: import("pg").Client) {
+  return rowsOnClient<AssetPositionRecord>(client,
     `
       select ${POSITION_FIELDS}
       from asset_positions
@@ -620,24 +629,7 @@ async function replaceSourceBalances(
     sourceId,
   ]);
 
-  for (const balance of mergeDuplicateBalances(balances)) {
-    await client.query(
-      `
-        insert into asset_balances (
-          user_id, source_id, asset_symbol, asset_name, amount, value_usd,
-          category, raw_data, updated_at
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        on conflict (source_id, asset_symbol, category)
-        do update set
-          user_id = excluded.user_id,
-          asset_name = excluded.asset_name,
-          amount = excluded.amount,
-          value_usd = excluded.value_usd,
-          raw_data = excluded.raw_data,
-          updated_at = excluded.updated_at
-      `,
-      [
+  const rows = mergeDuplicateBalances(balances).map(balance => [
         userId,
         sourceId,
         balance.assetSymbol,
@@ -647,8 +639,25 @@ async function replaceSourceBalances(
         balance.category,
         balance.rawData ? JSON.stringify(balance.rawData) : null,
         updatedAt,
-      ]
-    );
+      ]);
+  for (let offset = 0; offset < rows.length; offset += 100) {
+    const batch = rows.slice(offset, offset + 100);
+    const placeholders = batch.map((_, index) => '(' + Array.from({ length: 9 }, (_, column) => '$' + (index * 9 + column + 1)).join(', ') + ')').join(', ');
+    await client.query(`
+        insert into asset_balances (
+          user_id, source_id, asset_symbol, asset_name, amount, value_usd,
+          category, raw_data, updated_at
+        )
+        values ${placeholders}
+        on conflict (source_id, asset_symbol, category)
+        do update set
+          user_id = excluded.user_id,
+          asset_name = excluded.asset_name,
+          amount = excluded.amount,
+          value_usd = excluded.value_usd,
+          raw_data = excluded.raw_data,
+          updated_at = excluded.updated_at
+      `, batch.flat());
   }
 }
 
@@ -664,27 +673,13 @@ async function replaceSourcePositions(
     sourceId,
   ]);
 
-  for (const position of positions) {
-    await client.query(
-      `
-        insert into asset_positions (
-          user_id, source_id, provider, chain, protocol_id, protocol_name,
-          position_type, asset_value_usd, debt_value_usd, reward_value_usd,
-          net_value_usd, raw_data, updated_at
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        on conflict (source_id, provider, chain, protocol_id, position_type)
-        do update set
-          user_id = excluded.user_id,
-          protocol_name = excluded.protocol_name,
-          asset_value_usd = excluded.asset_value_usd,
-          debt_value_usd = excluded.debt_value_usd,
-          reward_value_usd = excluded.reward_value_usd,
-          net_value_usd = excluded.net_value_usd,
-          raw_data = excluded.raw_data,
-          updated_at = excluded.updated_at
-      `,
-      [
+  const uniquePositions = new Map<string, NormalizedAssetPosition>();
+  positions.forEach((position, index) => {
+    const fields = [position.provider, position.chain, position.protocolId, position.positionType];
+    const key = fields.some(value => value == null) ? `nullable:${index}` : JSON.stringify(fields);
+    uniquePositions.set(key, position);
+  });
+  const rows = [...uniquePositions.values()].map(position => [
         userId,
         sourceId,
         position.provider,
@@ -698,16 +693,40 @@ async function replaceSourcePositions(
         position.netValueUsd,
         position.rawData ? JSON.stringify(position.rawData) : null,
         updatedAt,
-      ]
-    );
+      ]);
+  for (let offset = 0; offset < rows.length; offset += 100) {
+    const batch = rows.slice(offset, offset + 100);
+    const placeholders = batch.map((_, index) => '(' + Array.from({ length: 13 }, (_, column) => '$' + (index * 13 + column + 1)).join(', ') + ')').join(', ');
+    await client.query(`
+        insert into asset_positions (
+          user_id, source_id, provider, chain, protocol_id, protocol_name,
+          position_type, asset_value_usd, debt_value_usd, reward_value_usd,
+          net_value_usd, raw_data, updated_at
+        )
+        values ${placeholders}
+        on conflict (source_id, provider, chain, protocol_id, position_type)
+        do update set
+          user_id = excluded.user_id,
+          protocol_name = excluded.protocol_name,
+          asset_value_usd = excluded.asset_value_usd,
+          debt_value_usd = excluded.debt_value_usd,
+          reward_value_usd = excluded.reward_value_usd,
+          net_value_usd = excluded.net_value_usd,
+          raw_data = excluded.raw_data,
+          updated_at = excluded.updated_at
+      `, batch.flat());
   }
 }
 
-export async function captureAssetSnapshot(userId: number, capturedAt = new Date()) {
+export async function captureAssetSnapshot(userId: number, capturedAt = new Date(), client?: import("pg").Client) {
+  if (!client) return withTransaction(async connection => {
+    await connection.query("select id from users where id = $1 for update", [normalizeUserId(userId)]);
+    return captureAssetSnapshot(userId, capturedAt, connection);
+  });
   const normalizedUserId = normalizeUserId(userId);
-  const balances = await listAllBalances(normalizedUserId);
-  const positions = await listAllPositions(normalizedUserId);
-  const manualAssets = await listAllActiveManualAssets(normalizedUserId);
+  const balances = await listAllBalances(normalizedUserId, client);
+  const positions = await listAllPositions(normalizedUserId, client);
+  const manualAssets = await listAllActiveManualAssets(normalizedUserId, client);
   const snapshotDate = toSnapshotDate(capturedAt);
   const createdAt = new Date(capturedAt).toISOString();
 
@@ -762,7 +781,7 @@ export async function captureAssetSnapshot(userId: number, capturedAt = new Date
     totalNetValueUsd: totalValueUsd,
   });
 
-  const snapshot = await queryOne<AssetSnapshotRecord & { breakdown?: string | null }>(
+  const snapshots = await rowsOnClient<AssetSnapshotRecord & { breakdown?: string | null }>(client,
     `
       insert into asset_snapshots (
         user_id, snapshot_date, total_value_usd, breakdown, created_at
@@ -778,7 +797,7 @@ export async function captureAssetSnapshot(userId: number, capturedAt = new Date
     [normalizedUserId, snapshotDate, totalValueUsd, breakdown, createdAt]
   );
 
-  return mapSnapshot(snapshot);
+  return mapSnapshot(snapshots[0]);
 }
 
 export async function listAssetSnapshots(
@@ -815,153 +834,89 @@ export async function getAssetSummary(userId: number): Promise<AssetSummaryRespo
     topPositionRows,
     manualSummary,
     snapshots,
-  } = await withConnection(
-    async (client) => {
-      const sourceStatsResult = await client.query<{
-        sourceCount: string;
-        failedSourceCount: string;
-        lastSyncedAt: string | null;
-      }>(
-        `
-          select
+  } = await queryOne<any>(
+    `with summary_balances as materialized (select * from asset_balances where user_id = $1),
+summary_positions as materialized (select * from asset_positions where user_id = $1),
+summary_manual as materialized (select * from manual_assets where user_id = $1 and is_deleted = false),
+sourceStats as (select
             count(*)::text as "sourceCount",
             count(*) filter (where status = 'FAILED')::text as "failedSourceCount",
             max(last_synced_at) as "lastSyncedAt"
           from asset_sources
-          where user_id = $1
-        `,
-        [normalizedUserId]
-      );
-
-      const sourceTypeResult = await client.query<{ sourceType: string; valueUsd: string }>(
-        `
-          select source_type as "sourceType", sum(value_usd)::text as "valueUsd"
+          where user_id = $1),
+sourceType as (select source_type as "sourceType", sum(value_usd)::text as "valueUsd"
           from (
             select asset_sources.type as source_type, asset_balances.value_usd
-            from asset_balances
+            from summary_balances asset_balances
             join asset_sources on asset_sources.id = asset_balances.source_id
             where asset_balances.user_id = $1 and asset_balances.category <> 'DETAIL'
             union all
             select asset_sources.type as source_type, asset_positions.net_value_usd as value_usd
-            from asset_positions
+            from summary_positions asset_positions
             join asset_sources on asset_sources.id = asset_positions.source_id
             where asset_positions.user_id = $1
             union all
             select 'MANUAL' as source_type, manual_assets.value_usd
-            from manual_assets
+            from summary_manual manual_assets
             where manual_assets.user_id = $1 and manual_assets.is_deleted = false
           ) totals
-          group by source_type
-        `,
-        [normalizedUserId]
-      );
-
-      const categoryResult = await client.query<{ category: string; valueUsd: string }>(
-        `
-          select category, sum(value_usd)::text as "valueUsd"
+          group by source_type),
+category as (select category, sum(value_usd)::text as "valueUsd"
           from (
             select asset_balances.category, asset_balances.value_usd
-            from asset_balances
+            from summary_balances asset_balances
             where asset_balances.user_id = $1 and asset_balances.category <> 'DETAIL'
             union all
             select asset_positions.position_type as category, asset_positions.net_value_usd as value_usd
-            from asset_positions
+            from summary_positions asset_positions
             where asset_positions.user_id = $1
             union all
             select manual_assets.type as category, manual_assets.value_usd
-            from manual_assets
+            from summary_manual manual_assets
             where manual_assets.user_id = $1 and manual_assets.is_deleted = false
           ) totals
-          group by category
-        `,
-        [normalizedUserId]
-      );
-
-      const topBalanceResult = await client.query<{
-        sourceId: number;
-        sourceName: string;
-        sourceType: "CEX" | "ONCHAIN";
-        valueUsd: string;
-        categories: string[];
-        balanceCount: string;
-      }>(
-        `
-          select
+          group by category),
+topBalance as (select
             asset_sources.id as "sourceId",
             asset_sources.name as "sourceName",
             asset_sources.type as "sourceType",
             sum(asset_balances.value_usd)::text as "valueUsd",
             array_remove(array_agg(distinct asset_balances.category), null) as categories,
             count(*)::text as "balanceCount"
-          from asset_balances
+          from summary_balances asset_balances
           join asset_sources on asset_sources.id = asset_balances.source_id
           where asset_balances.user_id = $1 and asset_balances.category <> 'DETAIL'
-          group by asset_sources.id, asset_sources.name, asset_sources.type
-        `,
-        [normalizedUserId]
-      );
-
-      const topPositionResult = await client.query<{
-        sourceId: number;
-        sourceName: string;
-        sourceType: "CEX" | "ONCHAIN";
-        valueUsd: string;
-        categories: string[];
-        positionCount: string;
-      }>(
-        `
-          select
+          group by asset_sources.id, asset_sources.name, asset_sources.type),
+topPosition as (select
             asset_sources.id as "sourceId",
             asset_sources.name as "sourceName",
             asset_sources.type as "sourceType",
             sum(asset_positions.net_value_usd)::text as "valueUsd",
             array_remove(array_agg(distinct asset_positions.position_type), null) as categories,
             count(*)::text as "positionCount"
-          from asset_positions
+          from summary_positions asset_positions
           join asset_sources on asset_sources.id = asset_positions.source_id
           where asset_positions.user_id = $1
-          group by asset_sources.id, asset_sources.name, asset_sources.type
-        `,
-        [normalizedUserId]
-      );
-
-      const manualSummaryResult = await client.query<{
-        valueUsd: string | null;
-        manualAssetCount: string;
-        categories: string[] | null;
-      }>(
-        `
-          select
+          group by asset_sources.id, asset_sources.name, asset_sources.type),
+manualSummary as (select
             coalesce(sum(value_usd), 0)::text as "valueUsd",
             count(*)::text as "manualAssetCount",
             array_remove(array_agg(distinct type), null) as categories
-          from manual_assets
-          where user_id = $1 and is_deleted = false
-        `,
-        [normalizedUserId]
-      );
-
-      const snapshotsResult = await client.query<AssetSnapshotRecord>(
-        `
-          select ${SNAPSHOT_FIELDS}
+          from summary_manual manual_assets
+          where user_id = $1 and is_deleted = false),
+snapshots as (select ${SNAPSHOT_FIELDS}
           from asset_snapshots
           where user_id = $1
           order by snapshot_date desc
-          limit 2
-        `,
-        [normalizedUserId]
-      );
-
-      return {
-        sourceStats: sourceStatsResult.rows[0],
-        sourceTypeRows: sourceTypeResult.rows,
-        categoryRows: categoryResult.rows,
-        topBalanceRows: topBalanceResult.rows,
-        topPositionRows: topPositionResult.rows,
-        manualSummary: manualSummaryResult.rows[0],
-        snapshots: snapshotsResult.rows,
-      };
-    }
+          limit 2)
+select (select row_to_json(sourceStats) from sourceStats) as "sourceStats",
+(select coalesce(json_agg(summary_row), '[]'::json) from sourceType summary_row) as "sourceTypeRows",
+(select coalesce(json_agg(summary_row), '[]'::json) from category summary_row) as "categoryRows",
+(select coalesce(json_agg(summary_row), '[]'::json) from topBalance summary_row) as "topBalanceRows",
+(select coalesce(json_agg(summary_row), '[]'::json) from topPosition summary_row) as "topPositionRows",
+(select row_to_json(manualSummary) from manualSummary) as "manualSummary",
+(select coalesce(json_agg(summary_row), '[]'::json) from snapshots summary_row) as "snapshots"`,
+    [normalizedUserId]
   );
 
   const sourceTypeTotals = { CEX: 0, ONCHAIN: 0, MANUAL: 0 } as Record<
@@ -1276,8 +1231,10 @@ export async function createAssetSource(userId: number, input: Record<string, un
   const finishedAt = new Date();
   const finishedAtIso = finishedAt.toISOString();
   let createdSourceId: number | null = null;
+  let confirmedSource: AssetSourceRecord | null = null;
 
   await withTransaction(async (client) => {
+    await client.query("select id from users where id = $1 for update", [normalizedUserId]);
     const source = await client.query<AssetSourceRecord>(
       `
         insert into asset_sources (
@@ -1301,6 +1258,7 @@ export async function createAssetSource(userId: number, input: Record<string, un
     const createdSource = source.rows[0];
     assert(createdSource, "Failed to create source.", 500);
     createdSourceId = createdSource.id;
+    confirmedSource = createdSource;
 
     await replaceSourceBalances(
       client,
@@ -1333,14 +1291,14 @@ export async function createAssetSource(userId: number, input: Record<string, un
         finishedAtIso,
       ]
     );
+    await captureAssetSnapshot(normalizedUserId, new Date(), client);
   });
 
   assert(createdSourceId, "Failed to create source.", 500);
-  await captureAssetSnapshot(normalizedUserId);
 
   return {
-    source: await getAssetSource(normalizedUserId, createdSourceId),
-    summary: await getAssetSummary(normalizedUserId),
+    source: confirmedSource,
+    summary: await mutationSummary(normalizedUserId),
     error: null,
   };
 }
@@ -1399,7 +1357,7 @@ export async function updateAssetSource(
 
   return {
     source: updated,
-    summary: await getAssetSummary(normalizedUserId),
+    summary: await mutationSummary(normalizedUserId),
   };
 }
 
@@ -1411,6 +1369,7 @@ export async function deleteAssetSource(userId: number, sourceId: number) {
 
   await withTransaction(
     async (client) => {
+      await client.query("select id from users where id = $1 for update", [normalizedUserId]);
       await client.query(`delete from asset_balances where user_id = $1 and source_id = $2`, [
         normalizedUserId,
         normalizedSourceId,
@@ -1430,14 +1389,13 @@ export async function deleteAssetSource(userId: number, sourceId: number) {
       );
 
       assert((result.rowCount ?? 0) > 0, "Source was not deleted.", 500);
-    },
-    { retryTransient: true }
+      await captureAssetSnapshot(normalizedUserId, new Date(), client);
+    }
   );
-  await captureAssetSnapshot(normalizedUserId);
 
   return {
     deletedSourceId: normalizedSourceId,
-    summary: await getAssetSummary(normalizedUserId),
+    summary: await mutationSummary(normalizedUserId),
   };
 }
 
@@ -1622,7 +1580,11 @@ function validateManualAssetInput(
 
 export async function createManualAsset(userId: number, input: Record<string, unknown>) {
   const normalizedUserId = normalizeUserId(userId);
-  const totalManualAssets = await countActiveManualAssets(normalizedUserId);
+  const asset = await withTransaction(async client => {
+    await client.query("select id from users where id = $1 for update", [normalizedUserId]);
+    const queryOne = async <T,>(sql: string, params: unknown[]) => (await client.query<T>(sql, params)).rows[0] ?? null;
+
+  const totalManualAssets = await countActiveManualAssets(normalizedUserId, client);
   assert(totalManualAssets < MAX_MANUAL_ASSETS_PER_USER, "Manual asset limit reached.", 400);
 
   const payload = validateManualAssetInput(input);
@@ -1646,11 +1608,14 @@ export async function createManualAsset(userId: number, input: Record<string, un
     ]
   );
 
-  await captureAssetSnapshot(normalizedUserId);
+  await captureAssetSnapshot(normalizedUserId, new Date(), client);
+
+    return asset;
+  });
 
   return {
     asset,
-    summary: await getAssetSummary(normalizedUserId),
+    summary: await mutationSummary(normalizedUserId),
   };
 }
 
@@ -1660,6 +1625,10 @@ export async function updateManualAsset(
   input: Record<string, unknown>
 ) {
   const normalizedUserId = normalizeUserId(userId);
+  const asset = await withTransaction(async client => {
+    await client.query("select id from users where id = $1 for update", [normalizedUserId]);
+    const queryOne = async <T,>(sql: string, params: unknown[]) => (await client.query<T>(sql, params)).rows[0] ?? null;
+
   const current = await queryOne<ManualAssetRecord>(
     `
       select ${MANUAL_FIELDS}
@@ -1691,16 +1660,23 @@ export async function updateManualAsset(
     ]
   );
 
-  await captureAssetSnapshot(normalizedUserId);
+  await captureAssetSnapshot(normalizedUserId, new Date(), client);
+
+    return asset;
+  });
 
   return {
     asset,
-    summary: await getAssetSummary(normalizedUserId),
+    summary: await mutationSummary(normalizedUserId),
   };
 }
 
 export async function deleteManualAsset(userId: number, assetId: number) {
   const normalizedUserId = normalizeUserId(userId);
+  const asset = await withTransaction(async client => {
+    await client.query("select id from users where id = $1 for update", [normalizedUserId]);
+    const queryOne = async <T,>(sql: string, params: unknown[]) => (await client.query<T>(sql, params)).rows[0] ?? null;
+
   const asset = await queryOne<{ id: number }>(
     `
       select id
@@ -1713,7 +1689,7 @@ export async function deleteManualAsset(userId: number, assetId: number) {
 
   assert(asset, "Manual asset not found.", 404);
 
-  await execute(
+  await client.query(
     `
       update manual_assets
       set is_deleted = true, deleted_at = $3, updated_at = $3
@@ -1721,10 +1697,13 @@ export async function deleteManualAsset(userId: number, assetId: number) {
     `,
     [normalizedUserId, Number(assetId), now()]
   );
-  await captureAssetSnapshot(normalizedUserId);
+  await captureAssetSnapshot(normalizedUserId, new Date(), client);
+
+    return asset;
+  });
 
   return {
-    summary: await getAssetSummary(normalizedUserId),
+    summary: await mutationSummary(normalizedUserId),
   };
 }
 
@@ -1860,17 +1839,19 @@ export async function syncAssetSource(
   const finishedAt = new Date();
   const finishedAtIso = finishedAt.toISOString();
 
-  await withTransaction(async (client) => {
+  const confirmedSource = await withTransaction(async (client) => {
+    await client.query("select id from users where id = $1 for update", [normalizedUserId]);
     if (status === "SUCCESS") {
       await replaceSourceBalances(client, normalizedUserId, normalizedSourceId, balances, finishedAtIso);
       await replaceSourcePositions(client, normalizedUserId, normalizedSourceId, positions, finishedAtIso);
     }
 
-    await client.query(
+    const updated = await client.query<AssetSourceRecord>(
       `
         update asset_sources
-        set status = $3, last_error = $4, last_synced_at = $5, updated_at = $5
+        set status = $3, last_error = $4, last_synced_at = case when $3 = 'ACTIVE' then $5 else last_synced_at end, updated_at = $5
         where user_id = $1 and id = $2
+        returning ${SOURCE_FIELDS}
       `,
       [normalizedUserId, normalizedSourceId, status === "SUCCESS" ? "ACTIVE" : "FAILED", errorMessage, finishedAtIso]
     );
@@ -1894,15 +1875,13 @@ export async function syncAssetSource(
         finishedAtIso,
       ]
     );
+    if (shouldCaptureSnapshot) await captureAssetSnapshot(normalizedUserId, new Date(), client);
+    return updated.rows[0];
   });
 
-  if (shouldCaptureSnapshot) {
-    await captureAssetSnapshot(normalizedUserId);
-  }
-
   return {
-    source: await getAssetSource(normalizedUserId, normalizedSourceId),
-    summary: includeSummary ? await getAssetSummary(normalizedUserId) : undefined,
+    source: confirmedSource,
+    summary: includeSummary ? await mutationSummary(normalizedUserId) : undefined,
     error: errorMessage,
   };
 }
@@ -1932,7 +1911,7 @@ export async function syncAllAssetSources(userId: number) {
 
   return {
     results,
-    summary: await getAssetSummary(normalizedUserId),
+    summary: await mutationSummary(normalizedUserId),
   };
 }
 
