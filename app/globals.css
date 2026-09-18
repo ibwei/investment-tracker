@@ -137,6 +137,12 @@
   }
 }
 
+@media (max-width: 767px) {
+  body:has([data-mobile-tabbar]) {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 .earn-date-time-popup .ant-picker-panel-container,
 .earn-date-time-popup .ant-picker-time-panel,
 .earn-date-time-popup .ant-picker-content,

@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { 
   LayoutDashboard, 
@@ -10,9 +9,7 @@ import {
   Settings, 
   Compass,
   Wallet,
-  Menu,
   LogOut,
-  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/lib/i18n'
@@ -30,7 +27,6 @@ import {
 export function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const [mobileOpen, setMobileOpen] = useState(false)
   const { t } = useI18n()
   const { user, isAuthenticated, setUser } = useAuth()
 
@@ -51,7 +47,6 @@ export function Navbar() {
       })
     } finally {
       setUser(null)
-      setMobileOpen(false)
       router.push('/login')
       router.refresh()
     }
@@ -61,7 +56,7 @@ export function Navbar() {
     if (!isAuthenticated || !user) {
       return (
         <>
-          <Link href="/login" className="hidden md:block">
+          <Link href="/login">
             <Button variant="ghost" size="sm">
               {t('nav.login')}
             </Button>
@@ -80,12 +75,12 @@ export function Navbar() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="hidden items-center gap-3 rounded-full border border-border/60 bg-background/80 px-2.5 py-1.5 transition-colors hover:bg-secondary/60 md:flex"
+            className="flex items-center gap-3 rounded-full border border-border/60 bg-background/80 px-1.5 py-1.5 transition-colors hover:bg-secondary/60 md:px-2.5"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-sm font-semibold text-primary">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-sm font-semibold text-primary md:h-9 md:w-9">
               {avatarLetter}
             </div>
-            <div className="flex max-w-32 flex-col items-start text-left">
+            <div className="hidden max-w-32 flex-col items-start text-left md:flex">
               <span className="truncate text-sm font-medium text-foreground">{displayName}</span>
               <span className="text-xs text-muted-foreground">{t('nav.myAccount')}</span>
             </div>
@@ -118,69 +113,28 @@ export function Navbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-            <Compass className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">
-            {t('common.brand')}
-          </span>
-        </Link>
+    <>
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 md:h-16 lg:px-8">
+          <Link href="/" className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary md:h-9 md:w-9">
+              <Compass className="h-4 w-4 text-primary-foreground md:h-5 md:w-5" />
+            </div>
+            <span className="truncate text-base font-semibold tracking-tight md:text-lg">
+              {t('common.brand')}
+            </span>
+          </Link>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-secondary text-foreground'
-                    : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="flex items-center gap-3">
-          <LanguageSwitcher className="hidden md:inline-flex" />
-          {renderUserMenu()}
-          
-          {/* Mobile Menu Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileOpen(!mobileOpen)}
-          >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
-        </div>
-      </div>
-
-      {/* Mobile Navigation */}
-      {mobileOpen && (
-        <div className="border-t border-border/40 bg-background md:hidden">
-          <nav className="flex flex-col p-4">
-            <LanguageSwitcher className="mb-4 inline-flex self-start" />
+          {/* Desktop Navigation */}
+          <nav className="hidden items-center gap-1 md:flex">
             {navItems.map((item) => {
               const isActive = pathname === item.href
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setMobileOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors',
+                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-secondary text-foreground'
                       : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -191,45 +145,41 @@ export function Navbar() {
                 </Link>
               )
             })}
-            <div className="mt-4 border-t border-border/40 pt-4">
-              {isAuthenticated && user ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card/60 px-3 py-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-sm font-semibold text-primary">
-                      {avatarLetter}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{displayName}</div>
-                      <div className="truncate text-xs text-muted-foreground">{user.email}</div>
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-destructive hover:text-destructive"
-                    onClick={handleLogout}
-                  >
-                    <LogOut className="h-4 w-4" />
-                    {t('common.logout')}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <Link href="/login" onClick={() => setMobileOpen(false)}>
-                    <Button variant="ghost" className="w-full justify-start">
-                      {t('nav.login')}
-                    </Button>
-                  </Link>
-                  <Link href="/register" onClick={() => setMobileOpen(false)}>
-                    <Button className="w-full">
-                      {t('nav.getStarted')}
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </div>
           </nav>
+
+          <div className="flex items-center gap-2 md:gap-3">
+            <LanguageSwitcher />
+            {renderUserMenu()}
+          </div>
         </div>
-      )}
-    </header>
+      </header>
+
+      <nav
+        data-mobile-tabbar
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border/40 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
+      >
+        <div className="grid h-16 grid-cols-4">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors',
+                  isActive
+                    ? 'text-primary'
+                    : 'text-muted-foreground active:text-foreground'
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
+      </nav>
+    </>
   )
 }
