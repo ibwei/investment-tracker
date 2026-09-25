@@ -14,12 +14,19 @@ export type AssetProviderErrorCode =
 export class AssetProviderError extends Error {
   code: AssetProviderErrorCode;
   status?: number;
+  transient: boolean;
 
-  constructor(message: string, code: AssetProviderErrorCode = "UNKNOWN", status?: number) {
+  constructor(
+    message: string,
+    code: AssetProviderErrorCode = "UNKNOWN",
+    status?: number,
+    transient = false
+  ) {
     super(message);
     this.name = "AssetProviderError";
     this.code = code;
     this.status = status;
+    this.transient = transient;
   }
 }
 
@@ -54,7 +61,10 @@ type AssetSyncResponse = {
   positions: NormalizedAssetPosition[];
 };
 
-const SERVICE_TIMEOUT_MS = 20_000;
+const CEX_TIMEOUT_MS = 20_000;
+const ONCHAIN_TIMEOUT_MS = 55_000;
+const TRANSIENT_RETRY_DELAY_MS = 2_000;
+const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504, 520, 521, 522, 523, 524]);
 
 function getServiceBaseUrl() {
   const configured = process.env.CEX_DEX_SERVICE_URL?.trim().replace(/\/+$/, "");
@@ -78,38 +88,90 @@ function getServiceAuthHeaders() {
     : {};
 }
 
-function createTimeoutSignal() {
-  return AbortSignal.timeout(SERVICE_TIMEOUT_MS);
+function createTimeoutSignal(timeoutMs: number) {
+  return AbortSignal.timeout(timeoutMs);
+}
+
+function timeoutFor(payload?: AssetSyncRequest) {
+  return payload?.type === "ONCHAIN" ? ONCHAIN_TIMEOUT_MS : CEX_TIMEOUT_MS;
+}
+
+function isTransientStatus(status: number) {
+  return TRANSIENT_HTTP_STATUSES.has(status);
+}
+
+async function pause(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestService(path: string, init: RequestInit, timeoutMs: number) {
+  return measure("provider", () =>
+    fetch(`${getServiceBaseUrl()}${path}`, {
+      ...init,
+      cache: "no-store",
+      signal: createTimeoutSignal(timeoutMs),
+    })
+  );
+}
+
+function toRequestError(error: unknown) {
+  return new AssetProviderError(
+    `CEX DEX service request failed: ${error instanceof Error ? error.message : "Unknown error."}`,
+    "PROVIDER_DOWN",
+    undefined,
+    true
+  );
+}
+
+async function readErrorResponse(response: Response) {
+  const body = await response.json().catch(() => null);
+  const transient = isTransientStatus(response.status);
+  throw new AssetProviderError(
+    body?.error ?? `CEX DEX service request failed with HTTP ${response.status}.`,
+    transient ? "PROVIDER_DOWN" : (body?.code ?? "UNKNOWN"),
+    response.status,
+    transient
+  );
+}
+
+async function withTransientRetry<T>(run: () => Promise<T>) {
+  try {
+    return await run();
+  } catch (error) {
+    if (!(error instanceof AssetProviderError) || !error.transient) {
+      throw error;
+    }
+    await pause(TRANSIENT_RETRY_DELAY_MS);
+    return run();
+  }
 }
 
 async function postToService<T>(path: string, payload: AssetSyncRequest): Promise<T> {
-  const response = await measure("provider", () => fetch(`${getServiceBaseUrl()}${path}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json",
-      ...getServiceAuthHeaders(),
-    },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    signal: createTimeoutSignal(),
-  })).catch((error) => {
-    throw new AssetProviderError(
-      `CEX DEX service request failed: ${error instanceof Error ? error.message : "Unknown error."}`,
-      "PROVIDER_DOWN"
-    );
+  const timeoutMs = timeoutFor(payload);
+
+  return withTransientRetry(async () => {
+    const response = await requestService(
+      path,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+          ...getServiceAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
+      },
+      timeoutMs
+    ).catch((error) => {
+      throw toRequestError(error);
+    });
+
+    if (!response.ok) {
+      await readErrorResponse(response);
+    }
+
+    return (await response.json().catch(() => null)) as T;
   });
-
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new AssetProviderError(
-      body?.error ?? `CEX DEX service request failed with HTTP ${response.status}.`,
-      body?.code ?? "UNKNOWN",
-      response.status
-    );
-  }
-
-  return body as T;
 }
 
 export async function fetchSourceAssetsFromCexDexService(payload: AssetSyncRequest) {
@@ -121,30 +183,26 @@ export async function testSourceConnectionWithCexDexService(payload: AssetSyncRe
 }
 
 export async function proxyCexDexServiceGet(path: string) {
-  const response = await measure("provider", () => fetch(`${getServiceBaseUrl()}${path}`, {
-    headers: {
-      accept: "application/json",
-      ...getServiceAuthHeaders(),
-    },
-    cache: "no-store",
-    signal: createTimeoutSignal(),
-  })).catch((error) => {
-    throw new AssetProviderError(
-      `CEX DEX service request failed: ${error instanceof Error ? error.message : "Unknown error."}`,
-      "PROVIDER_DOWN"
-    );
+  return withTransientRetry(async () => {
+    const response = await requestService(
+      path,
+      {
+        headers: {
+          accept: "application/json",
+          ...getServiceAuthHeaders(),
+        },
+      },
+      CEX_TIMEOUT_MS
+    ).catch((error) => {
+      throw toRequestError(error);
+    });
+
+    if (!response.ok) {
+      await readErrorResponse(response);
+    }
+
+    return response.json().catch(() => null);
   });
-
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new AssetProviderError(
-      body?.error ?? `CEX DEX service request failed with HTTP ${response.status}.`,
-      body?.code ?? "UNKNOWN",
-      response.status
-    );
-  }
-
-  return body;
 }
 
 export type { AssetProviderType, AssetSyncRequest };

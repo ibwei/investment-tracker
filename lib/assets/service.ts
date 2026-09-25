@@ -1802,6 +1802,7 @@ export async function syncAssetSource(
   let positions: NormalizedAssetPosition[] = [];
   let errorMessage: string | null = null;
   let status = "SUCCESS";
+  let persistedStatus = "ACTIVE";
 
   try {
     if (source.type === "CEX") {
@@ -1832,7 +1833,12 @@ export async function syncAssetSource(
 
     balances = mergeDuplicateBalances(balances);
   } catch (error) {
+    const keepPreviousStatus =
+      error instanceof AssetProviderError &&
+      error.transient &&
+      (source.status === "ACTIVE" || source.status === "PENDING");
     status = "FAILED";
+    persistedStatus = keepPreviousStatus ? source.status : "FAILED";
     errorMessage = toSyncErrorSummary(error);
   }
 
@@ -1842,6 +1848,7 @@ export async function syncAssetSource(
   const confirmedSource = await withTransaction(async (client) => {
     await client.query("select id from users where id = $1 for update", [normalizedUserId]);
     if (status === "SUCCESS") {
+      persistedStatus = "ACTIVE";
       await replaceSourceBalances(client, normalizedUserId, normalizedSourceId, balances, finishedAtIso);
       await replaceSourcePositions(client, normalizedUserId, normalizedSourceId, positions, finishedAtIso);
     }
@@ -1849,11 +1856,18 @@ export async function syncAssetSource(
     const updated = await client.query<AssetSourceRecord>(
       `
         update asset_sources
-        set status = $3, last_error = $4, last_synced_at = case when $3 = 'ACTIVE' then $5 else last_synced_at end, updated_at = $5
+        set status = $3, last_error = $4, last_synced_at = case when $6 then $5 else last_synced_at end, updated_at = $5
         where user_id = $1 and id = $2
         returning ${SOURCE_FIELDS}
       `,
-      [normalizedUserId, normalizedSourceId, status === "SUCCESS" ? "ACTIVE" : "FAILED", errorMessage, finishedAtIso]
+      [
+        normalizedUserId,
+        normalizedSourceId,
+        persistedStatus,
+        errorMessage,
+        finishedAtIso,
+        status === "SUCCESS",
+      ]
     );
 
     await client.query(
