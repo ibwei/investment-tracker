@@ -78,6 +78,8 @@ const statusColors: Record<string, string> = {
   deleted: 'bg-destructive/20 text-destructive border-destructive/30'
 }
 
+const LATEST_CLOSED_INVESTMENT_COUNT = 10
+
 interface SortableHeaderProps {
   field: SortField
   children: React.ReactNode
@@ -177,6 +179,31 @@ function isActiveInvestment(status: Investment['status']) {
   return status === 'active'
 }
 
+function endedAtValue(investment: Investment) {
+  const time = Date.parse(investment.endDate)
+  return Number.isFinite(time) ? time : 0
+}
+
+function compareInvestments(
+  a: Investment,
+  b: Investment,
+  sortField: SortField,
+  sortDirection: SortDirection,
+) {
+  const aVal = a[sortField]
+  const bVal = b[sortField]
+
+  if (typeof aVal === 'string' && typeof bVal === 'string') {
+    return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+  }
+
+  if (typeof aVal === 'number' && typeof bVal === 'number') {
+    return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
+  }
+
+  return 0
+}
+
 export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableProps) {
   const pendingIds = useInvestmentStore(state => state.pendingIds)
   const changedId = useInvestmentStore(state => state.changedId)
@@ -223,23 +250,7 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
       filtered = filtered.filter(i => i.status === filters.status)
     }
     
-    // Apply sorting
-    filtered.sort((a, b) => {
-      const aVal = a[sortField]
-      const bVal = b[sortField]
-      
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return sortDirection === 'asc' 
-          ? aVal.localeCompare(bVal) 
-          : bVal.localeCompare(aVal)
-      }
-      
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
-        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
-      }
-      
-      return 0
-    })
+    filtered.sort((a, b) => compareInvestments(a, b, sortField, sortDirection))
     
     return filtered
   }, [allInvestments, filters, sortField, sortDirection])
@@ -254,10 +265,18 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
     () => investments.filter((investment) => isActiveInvestment(investment.status)),
     [investments],
   )
-  const historicalInvestments = useMemo(
-    () => investments.filter((investment) => isHistoricalInvestment(investment.status)),
-    [investments],
-  )
+  const historicalInvestments = useMemo(() => {
+    const latestClosed = investments
+      .filter((investment) => isHistoricalInvestment(investment.status))
+      .sort((a, b) => endedAtValue(b) - endedAtValue(a) || b.id.localeCompare(a.id))
+      .slice(0, LATEST_CLOSED_INVESTMENT_COUNT)
+
+    if (sortField === 'startDate') {
+      return latestClosed
+    }
+
+    return [...latestClosed].sort((a, b) => compareInvestments(a, b, sortField, sortDirection))
+  }, [investments, sortField, sortDirection])
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -605,7 +624,9 @@ export function InvestmentTable({ onEdit, isReadOnly = false }: InvestmentTableP
         <Card className="gap-0 overflow-hidden border-border/50 bg-card/30 backdrop-blur-sm">
           <CardHeader className="border-b border-border/40">
             <CardTitle>{t('table.historyInvestments')}</CardTitle>
-            <CardDescription>{t('table.historyInvestmentsDescription')}</CardDescription>
+            <CardDescription>
+              {t('table.historyInvestmentsDescription', { count: LATEST_CLOSED_INVESTMENT_COUNT })}
+            </CardDescription>
           </CardHeader>
           <CardContent className="px-0">
             <div className="overflow-x-auto">
